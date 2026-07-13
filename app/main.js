@@ -17,6 +17,15 @@ rl.on("line", (command) => {
   else if(command.startsWith("echo ")) {
     console.log(command.slice(5));    
   }
+  else if(command.startsWith("type ")) {
+    const cmd = command.slice(5);
+    if(cmd == "type" || cmd == "echo" || cmd == "exit") {
+      console.log(`${cmd} is a shell builtin`);
+    }
+    else {
+      console.log(`${cmd}: not found`);      
+    }
+  }
   else {
     console.log(`${command}: command not found`);
   }
