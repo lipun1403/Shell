@@ -1,5 +1,6 @@
 const readline = require("readline");
 
+// default interface with '$' sign
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
