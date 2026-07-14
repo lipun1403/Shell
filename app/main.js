@@ -12,7 +12,7 @@ const rl = createInterface({
 });
 
 function isShellBuiltin(command) {
-  const builtins = ["echo", "type", "exit", "pwd"];
+  const builtins = ["echo", "type", "exit", "pwd", "cd"];
   return builtins.includes(command);
 }
 
@@ -63,6 +63,14 @@ rl.on("line", (command) => {
   }
   else if(command === "pwd") {
     console.log(process.cwd());    
+  }
+  else if(command === "cd ") {
+    const dir = command.slice(3).trim();
+    try {
+      process.chdir(dir);
+    } catch (error) {
+      console.log(`cd: ${dir}: No such file or directory.`);      
+    }
   }
   else {
     let cmd = command.split(" ")[0];
