@@ -166,7 +166,7 @@ rl.on("line", (command) => {
     let executablePath = findExecutable(cmd);
     
     if(executablePath) {
-      spawnSync(executablePath, args, { stdio: 'inherit' });
+      spawnSync(executablePath, args, { argv0: cmd, stdio: 'inherit' });
       rl.prompt();
       return;
     }
