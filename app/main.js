@@ -64,7 +64,7 @@ rl.on("line", (command) => {
   else if(command === "pwd") {
     console.log(process.cwd());    
   }
-  else if(command === "cd ") {
+  else if(command.startsWith("cd ")) {
     const dir = command.slice(3).trim();
     try {
       process.chdir(dir);
