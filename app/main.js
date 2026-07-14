@@ -56,7 +56,7 @@ rl.on("line", (command) => {
         console.log(`${cmd} is ${executablePath}`);
       }
       else {
-        console.log(`${cmd}: command not found`);
+        console.log(`${cmd}: not found`);
       }
     }
   }
