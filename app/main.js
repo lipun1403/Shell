@@ -38,29 +38,69 @@ function findExecutable(command) {
 
 function parseArguments(input) {
   const args = [];
-  let currentWord = "";
-  let activeQuote = null; 
+  let currentWord = '';
+  let activeQuote = null;
+  let isEscaped = false;
+  let hasWord = false; // Tracks if we are actively building an argument
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
 
-    if ((char === "'" || char === '"') && activeQuote === null) {
-      activeQuote = char;
-      
-    } else if (char === activeQuote) {
-      activeQuote = null;
-      
-    } else if (char === " " && activeQuote === null) {
-      if (currentWord.length > 0) {
-        args.push(currentWord);
-        currentWord = ""; 
-      }
-    } else {
+    if (isEscaped) {
       currentWord += char;
+      isEscaped = false;
+      hasWord = true;
+      continue;
     }
+
+    if (char === '\\') {
+      if (activeQuote === "'") {
+        currentWord += char;
+      } else {
+        isEscaped = true;
+      }
+      hasWord = true;
+      continue;
+    }
+
+    if (activeQuote) {
+      if (char === activeQuote) {
+        activeQuote = null; // The quote is closed
+      } else {
+        currentWord += char;
+      }
+      hasWord = true; // Ensures "" outputs an empty string instead of nothing
+      continue;
+    }
+
+    if (char === "'" || char === '"') {
+      activeQuote = char;
+      hasWord = true;
+      continue;
+    }
+
+    if (char === ' ' || char === '\t') {
+      if (hasWord) {
+        args.push(currentWord);
+        currentWord = '';
+        hasWord = false;
+      }
+      continue;
+    }
+
+    currentWord += char;
+    hasWord = true;
   }
 
-  if (currentWord.length > 0) {
+  // Handle errors for unfinished inputs
+  // if (activeQuote) {
+  //   throw new Error(`Syntax error: Unclosed quote ${activeQuote}`);
+  // }
+  // if (isEscaped) {
+  //   throw new Error('Syntax error: Trailing backslash');
+  // }
+
+  if (hasWord) {
     args.push(currentWord);
   }
 
