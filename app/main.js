@@ -69,7 +69,7 @@ rl.on("line", (command) => {
     try {
       process.chdir(dir);
     } catch (error) {
-      console.log(`cd: ${dir}: No such file or directory.`);      
+      console.log(`cd: ${dir}: No such file or directory`);      
     }
   }
   else {
