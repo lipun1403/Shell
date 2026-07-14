@@ -39,14 +39,18 @@ function findExecutable(command) {
 function parseArguments(input) {
   const args = [];
   let currentWord = "";
-  let inSingleQuotes = false;
+  let activeQuote = null; 
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
 
-    if (char === "'" || char === '"') {
-      inSingleQuotes = !inSingleQuotes;
-    } else if (char === " " && !inSingleQuotes) {
+    if ((char === "'" || char === '"') && activeQuote === null) {
+      activeQuote = char;
+      
+    } else if (char === activeQuote) {
+      activeQuote = null;
+      
+    } else if (char === " " && activeQuote === null) {
       if (currentWord.length > 0) {
         args.push(currentWord);
         currentWord = ""; 
