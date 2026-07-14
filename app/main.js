@@ -1,6 +1,7 @@
 import { createInterface } from "readline";
 import { delimiter, resolve } from "path";
 import { accessSync, constants, statSync } from "fs";
+import { spawnSync } from "child_process";
 
 
 // default interface with '$' sign
@@ -61,7 +62,26 @@ rl.on("line", (command) => {
     }
   }
   else {
-    console.log(`${command}: command not found`);
+    let cmd = command.split(" ")[0];
+    let executablePath = findExecutable(cmd);
+    if(executablePath) {
+      let args = command.split(" ");
+      args.shift();
+
+      const spawnChild = spawnSync(executablePath, args, {argv0: cmd, stdio: 'inherit'});
+      // spawnChild.stdout.on('data', (data) => {
+      //   process.stdout.write(data.toString())
+      // })
+      // spawnChild.stderr.on('data', (data) => {
+      //   process.stderr.write(data.toString());
+      // })
+      // spawnChild.on('error', (err) => console.error(err.message));
+      // spawnChild.on('close', (code) => {
+        rl.prompt();
+      // })
+      return;
+    }
+    else console.log(`${command}: command not found`);
   }
   rl.prompt();
 })
