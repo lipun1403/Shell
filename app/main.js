@@ -152,26 +152,27 @@ rl.on("line", (command) => {
     }
   }
   else {
-    let cmd = command.split(" ")[0];
-    let executablePath = findExecutable(cmd);
-    if(executablePath) {
-      let args = command.split(" ");
-      args.shift();
-
-      const spawnChild = spawnSync(executablePath, args, {argv0: cmd, stdio: 'inherit'});
-      // spawnChild.stdout.on('data', (data) => {
-      //   process.stdout.write(data.toString())
-      // })
-      // spawnChild.stderr.on('data', (data) => {
-      //   process.stderr.write(data.toString());
-      // })
-      // spawnChild.on('error', (err) => console.error(err.message));
-      // spawnChild.on('close', (code) => {
-        rl.prompt();
-      // })
+    const parsedCommand = parseArguments(command);
+    
+    if (parsedCommand.length === 0) {
+      rl.prompt();
       return;
     }
-    else console.log(`${command}: command not found`);
+
+    const cmd = parsedCommand[0];
+    
+    const args = parsedCommand.slice(1);
+
+    let executablePath = findExecutable(cmd);
+    
+    if(executablePath) {
+      spawnSync(executablePath, args, { stdio: 'inherit' });
+      rl.prompt();
+      return;
+    }
+    else {
+      console.log(`${command}: command not found`);
+    }
   }
   rl.prompt();
 })
