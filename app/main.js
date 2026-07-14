@@ -65,7 +65,8 @@ rl.on("line", (command) => {
     console.log(process.cwd());    
   }
   else if(command.startsWith("cd ")) {
-    const dir = command.slice(3).trim();
+    let dir = command.slice(3).trim();
+    if(dir === "~") dir = process.env.HOME;
     try {
       process.chdir(dir);
     } catch (error) {
