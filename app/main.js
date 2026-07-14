@@ -36,6 +36,33 @@ function findExecutable(command) {
   return null;
 }
 
+function parseArguments(input) {
+  const args = [];
+  let currentWord = "";
+  let inSingleQuotes = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+
+    if (char === "'") {
+      inSingleQuotes = !inSingleQuotes;
+    } else if (char === " " && !inSingleQuotes) {
+      if (currentWord.length > 0) {
+        args.push(currentWord);
+        currentWord = ""; 
+      }
+    } else {
+      currentWord += char;
+    }
+  }
+
+  if (currentWord.length > 0) {
+    args.push(currentWord);
+  }
+
+  return args;
+}
+
 rl.prompt();
 
 rl.on("line", (command) => {
@@ -44,7 +71,8 @@ rl.on("line", (command) => {
     return;
   }
   else if(command.startsWith("echo ")) {
-    console.log(command.slice(5));    
+    const cmd = parseArguments(command.slice(5))
+    console.log(cmd.join(" "));    
   }
   else if(command.startsWith("type ")) {
     const cmd = command.slice(5);
