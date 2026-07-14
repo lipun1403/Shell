@@ -44,7 +44,7 @@ function parseArguments(input) {
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
 
-    if (char === "'") {
+    if (char === "'" || char === '"') {
       inSingleQuotes = !inSingleQuotes;
     } else if (char === " " && !inSingleQuotes) {
       if (currentWord.length > 0) {
