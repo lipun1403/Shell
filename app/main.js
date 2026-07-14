@@ -89,6 +89,12 @@ rl.on("line", (command) => {
       }
     }
   }
+  else if(command.startsWith("cat ")) {
+    const args = parseArguments(command.slice(4));
+    spawnSync('cat', args, { 
+      stdio: 'inherit'
+    });
+  }
   else if(command === "pwd") {
     console.log(process.cwd());    
   }
