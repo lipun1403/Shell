@@ -12,7 +12,7 @@ const rl = createInterface({
 });
 
 function isShellBuiltin(command) {
-  const builtins = ["echo", "type", "exit"];
+  const builtins = ["echo", "type", "exit", "pwd"];
   return builtins.includes(command);
 }
 
@@ -39,7 +39,7 @@ function findExecutable(command) {
 rl.prompt();
 
 rl.on("line", (command) => {
-  if(command == "exit") {
+  if(command === "exit") {
     rl.close();
     return;
   }
@@ -60,6 +60,9 @@ rl.on("line", (command) => {
         console.log(`${cmd}: not found`);
       }
     }
+  }
+  else if(command === "pwd") {
+    console.log(process.cwd());    
   }
   else {
     let cmd = command.split(" ")[0];
