@@ -15,7 +15,7 @@ function completer(line) {
   const builtins = ["echo", "type", "exit", "pwd", "cd"];
   
   // 2. Filter the commands that start with the current line
-  const hits = builtins.filter((cmd) => cmd.startsWith(line));
+  const hits = builtins.filter((cmd) => cmd.startsWith(line))+" ";
 
   // 3. Return the matches and the original line
   // If no hits are found, we return an empty array so readline does nothing
