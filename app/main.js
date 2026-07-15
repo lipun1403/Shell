@@ -21,6 +21,11 @@ function completer(line) {
     return [[hits[0] + " "], line];
   }
 
+  if (hits.length === 0) {
+    process.stdout.write("\x07"); 
+    return [[], line]; 
+  }
+
   // 3. Return the matches and the original line
   // If no hits are found, we return an empty array so readline does nothing
   return [hits, line];
