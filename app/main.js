@@ -10,29 +10,65 @@ const rl = createInterface({
   completer: completer,
 });
 
+const builtins = ["echo", "type", "exit", "pwd", "cd"];
 function completer(line) {
-  // 1. Define the commands we want to autocomplete
-  const builtins = ["echo", "type", "exit", "pwd", "cd"];
   
-  // 2. Filter the commands that start with the current line
-  const hits = builtins.filter((cmd) => cmd.startsWith(line));
+  // 1. Gather all candidates starting with the current input
+  const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
+  const externalHits = getExternalExecutables(line);
 
-  if (hits.length === 1) {
-    return [[hits[0] + " "], line];
+  // 2. Combine and deduplicate using a Set, then sort alphabetically
+  const uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
+
+  // 3. Handle matches exactly like before
+  if (uniqueHits.length === 1) {
+    return [[uniqueHits[0] + " "], line];
   }
 
-  if (hits.length === 0) {
+  if (uniqueHits.length === 0) {
     process.stdout.write("\x07"); 
     return [[], line]; 
   }
 
-  // 3. Return the matches and the original line
-  // If no hits are found, we return an empty array so readline does nothing
-  return [hits, line];
+  return [uniqueHits, line];
+}
+
+function getExternalExecutables(prefix) {
+  const matches = new Set();
+  const pathEnv = process.env.PATH || '';
+  // Split the path (using ':' on Linux/macOS or ';' on Windows)
+  const dirs = pathEnv.split(path.delimiter);
+
+  for (const dir of dirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.startsWith(prefix)) {
+          const filePath = path.join(dir, file);
+          try {
+            const stats = fs.statSync(filePath);
+            // Ensure it is a regular file and executable by the current user
+            const isExecutable = (stats.mode & fs.constants.S_IXUSR) !== 0;
+            if (stats.isFile() && isExecutable) {
+              matches.add(file);
+            }
+          } catch (e) {
+            // Skip files we can't stat due to permissions
+          }
+        }
+      }
+    } catch (e) {
+      // Skip directories we can't read
+    }
+  }
+
+  return Array.from(matches);
 }
 
 function isShellBuiltin(command) {
-  const builtins = ["echo", "type", "exit", "pwd", "cd"];
+  // const builtins = ["echo", "type", "exit", "pwd", "cd"];
   return builtins.includes(command);
 }
 
