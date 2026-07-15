@@ -34,13 +34,26 @@ function completer(line) {
     return [[], line]; 
   }
 
-  // 5. Multiple matches (Custom Double-Tab Logic)
+  // 5. Multiple Matches: Check for Longest Common Prefix (LCP)
+  const lcp = getLongestCommonPrefix(uniqueHits);
+
+  // If the LCP is longer than what the user typed, we can auto-fill the difference!
+  if (lcp.length > line.length) {
+    tabTracker = { line: "", count: 0 }; // reset tracker since input is progressing
+    
+    // Write the remaining common characters directly to the input buffer
+    rl.write(lcp.slice(line.length));
+    
+    return [[], line]; // Tell readline to do nothing else
+  }
+
+  // 6. Multiple matches: LCP is exactly what the user typed (No progress can be made)
   if (tabTracker.line !== line) {
-    // First <TAB> press for this input
+    // First <TAB> press where LCP is maxed out
     tabTracker.line = line;
     tabTracker.count = 1;
     process.stdout.write("\x07"); // Ring bell
-    return [[], line]; // Return empty to block Node's default multi-match behavior
+    return [[], line];
   } else {
     // Second <TAB> press
     tabTracker.count++;
@@ -56,6 +69,18 @@ function completer(line) {
     
     return [[], line];
   }
+}
+
+function getLongestCommonPrefix(words) {
+  if (words.length === 0) return "";
+  let prefix = words[0];
+  for (let i = 1; i < words.length; i++) {
+    while (words[i].indexOf(prefix) !== 0) {
+      prefix = prefix.substring(0, prefix.length - 1);
+      if (prefix === "") return "";
+    }
+  }
+  return prefix;
 }
 
 function getExternalExecutables(prefix) {
