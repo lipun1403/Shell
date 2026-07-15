@@ -11,8 +11,9 @@ const rl = createInterface({
 });
 
 const builtins = ["echo", "type", "exit", "pwd", "cd"];
+let tabTracker = { line: "", count: 0 };
+
 function completer(line) {
-  
   // 1. Gather all candidates starting with the current input
   const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
   const externalHits = getExternalExecutables(line);
@@ -20,17 +21,41 @@ function completer(line) {
   // 2. Combine and deduplicate using a Set, then sort alphabetically
   const uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
 
-  // 3. Handle matches exactly like before
+  // 3. Exact single match
   if (uniqueHits.length === 1) {
+    tabTracker = { line: "", count: 0 }; // reset tracker
     return [[uniqueHits[0] + " "], line];
   }
 
+  // 4. No matches
   if (uniqueHits.length === 0) {
+    tabTracker = { line: "", count: 0 }; // reset tracker
     process.stdout.write("\x07"); 
     return [[], line]; 
   }
 
-  return [uniqueHits, line];
+  // 5. Multiple matches (Custom Double-Tab Logic)
+  if (tabTracker.line !== line) {
+    // First <TAB> press for this input
+    tabTracker.line = line;
+    tabTracker.count = 1;
+    process.stdout.write("\x07"); // Ring bell
+    return [[], line]; // Return empty to block Node's default multi-match behavior
+  } else {
+    // Second <TAB> press
+    tabTracker.count++;
+    if (tabTracker.count === 2) {
+      // Print the matches separated by exactly two spaces
+      process.stdout.write("\n" + uniqueHits.join("  ") + "\n");
+      
+      // Re-print the prompt and the user's current line on the new line
+      process.stdout.write(rl.getPrompt() + line);
+      
+      tabTracker.count = 0; // Reset so a 3rd tab acts like a 1st tab
+    }
+    
+    return [[], line];
+  }
 }
 
 function getExternalExecutables(prefix) {
