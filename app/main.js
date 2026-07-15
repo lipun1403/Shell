@@ -103,22 +103,30 @@ rl.on("line", (command) => {
     return;
   }
 
-  // --- Extract > and target file once for all commands ---
-  let redirectIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
-  let targetFile = null;
+  let targetOutFile = null; 
+  let targetErrFile = null;
 
-  if (redirectIndex !== -1) {
-    targetFile = parsedCommand[redirectIndex + 1];
-    parsedCommand.splice(redirectIndex, 2); // Removes both ">" and "filename" from the array
+  let errIndex = parsedCommand.findIndex((arg) => arg === "2>");
+  if (errIndex !== -1) {
+    targetErrFile = parsedCommand[errIndex + 1];
+    parsedCommand.splice(errIndex, 2); // Remove '2>' and the filename from arguments
   }
+
+  // --- Extract > and target file once for all commands ---
+  let outIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
+  if (outIndex !== -1) {
+    targetOutFile = parsedCommand[outIndex + 1];
+    parsedCommand.splice(outIndex, 2); // Remove '>' and the filename from arguments
+  }
+
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
 
   // Helper to handle built-in text output (either to screen or file)
   function writeOut(text) {
-    if (targetFile) {
-      writeFileSync(targetFile, text + "\n");
+    if (targetOutFile) {
+      writeFileSync(targetOutFile, text + "\n");
     } else {
       console.log(text);
     }
@@ -146,14 +154,16 @@ rl.on("line", (command) => {
     }
   } 
   else if (cmd === "cat") {
-    let stdioOpt = "inherit";
-    if (targetFile) {
-      // route stdout (index 1) to the file descriptor
-      stdioOpt = ["inherit", openSync(targetFile, "w"), "inherit"];
+    let stdioOpt = ["inherit", "inherit", "inherit"];
+    
+    if (targetOutFile) {
+      stdioOpt[1] = openSync(targetOutFile, "w"); // Connect success pipe to file
     }
-    spawnSync("cat", args, {
-      stdio: stdioOpt,
-    });
+    if (targetErrFile) {
+      stdioOpt[2] = openSync(targetErrFile, "w"); // Connect error pipe to file
+    }
+
+    spawnSync("cat", args, { stdio: stdioOpt });
   } 
   else if (cmd === "pwd") {
     writeOut(process.cwd());
@@ -164,20 +174,35 @@ rl.on("line", (command) => {
     try {
       process.chdir(dir);
     } catch (error) {
-      console.log(`cd: ${dir}: No such file or directory`);
+      const errorMsg = `cd: ${dir}: No such file or directory`;
+      if (targetErrFile) {
+        writeFileSync(targetErrFile, errorMsg + "\n");
+      } else {
+        console.log(errorMsg);
+      }
     }
   } 
   else {
     let executablePath = findExecutable(cmd);
 
     if (executablePath) {
-      let stdioOpt = "inherit";
-      if (targetFile) {
-        stdioOpt = ["inherit", openSync(targetFile, "w"), "inherit"];
+      let stdioOpt = ["inherit", "inherit", "inherit"];
+      
+      if (targetOutFile) {
+        stdioOpt[1] = openSync(targetOutFile, "w"); // Connect success pipe to file
       }
+      if (targetErrFile) {
+        stdioOpt[2] = openSync(targetErrFile, "w"); // Connect error pipe to file
+      }
+
       spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
     } else {
-      console.log(`${command}: command not found`);
+      const errorMsg = `${command}: command not found`;
+      if (targetErrFile) {
+        writeFileSync(targetErrFile, errorMsg + "\n");
+      } else {
+        console.log(errorMsg);
+      }
     }
   }
   
