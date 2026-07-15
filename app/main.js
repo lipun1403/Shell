@@ -1,10 +1,8 @@
 import { createInterface } from "readline";
 import { delimiter, resolve } from "path";
-import { accessSync, constants, statSync } from "fs";
+import { accessSync, constants, statSync, writeFileSync, openSync } from "fs";
 import { spawnSync } from "child_process";
 
-
-// default interface with '$' sign
 const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -18,30 +16,26 @@ function isShellBuiltin(command) {
 
 function findExecutable(command) {
   const path = process.env.PATH || "";
-
-  for(const directory of path.split(delimiter)) {
-    if(!directory) continue;
+  for (const directory of path.split(delimiter)) {
+    if (!directory) continue;
     const fullPath = resolve(directory, command);
     try {
       const stats = statSync(fullPath);
-      if(stats.isFile()) {
+      if (stats.isFile()) {
         accessSync(fullPath, constants.X_OK);
         return fullPath;
       }
-    }
-    catch(e) {
-      
-    }
+    } catch (e) {}
   }
   return null;
 }
 
 function parseArguments(input) {
   const args = [];
-  let currentWord = '';
+  let currentWord = "";
   let activeQuote = null;
   let isEscaped = false;
-  let hasWord = false; // Tracks if we are actively building an argument
+  let hasWord = false;
 
   for (let i = 0; i < input.length; i++) {
     const char = input[i];
@@ -53,7 +47,7 @@ function parseArguments(input) {
       continue;
     }
 
-    if (char === '\\') {
+    if (char === "\\") {
       if (activeQuote === "'") {
         currentWord += char;
       } else {
@@ -65,11 +59,11 @@ function parseArguments(input) {
 
     if (activeQuote) {
       if (char === activeQuote) {
-        activeQuote = null; // The quote is closed
+        activeQuote = null;
       } else {
         currentWord += char;
       }
-      hasWord = true; // Ensures "" outputs an empty string instead of nothing
+      hasWord = true;
       continue;
     }
 
@@ -79,10 +73,10 @@ function parseArguments(input) {
       continue;
     }
 
-    if (char === ' ' || char === '\t') {
+    if (char === " " || char === "\t") {
       if (hasWord) {
         args.push(currentWord);
-        currentWord = '';
+        currentWord = "";
         hasWord = false;
       }
       continue;
@@ -91,14 +85,6 @@ function parseArguments(input) {
     currentWord += char;
     hasWord = true;
   }
-
-  // Handle errors for unfinished inputs
-  // if (activeQuote) {
-  //   throw new Error(`Syntax error: Unclosed quote ${activeQuote}`);
-  // }
-  // if (isEscaped) {
-  //   throw new Error('Syntax error: Trailing backslash');
-  // }
 
   if (hasWord) {
     args.push(currentWord);
@@ -110,69 +96,90 @@ function parseArguments(input) {
 rl.prompt();
 
 rl.on("line", (command) => {
-  if(command === "exit") {
-    rl.close();
+  const parsedCommand = parseArguments(command);
+
+  if (parsedCommand.length === 0) {
+    rl.prompt();
     return;
   }
-  else if(command.startsWith("echo ")) {
-    const cmd = parseArguments(command.slice(5))
-    console.log(cmd.join(" "));    
+
+  // --- Extract > and target file once for all commands ---
+  let redirectIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
+  let targetFile = null;
+
+  if (redirectIndex !== -1) {
+    targetFile = parsedCommand[redirectIndex + 1];
+    parsedCommand.splice(redirectIndex, 2); // Removes both ">" and "filename" from the array
   }
-  else if(command.startsWith("type ")) {
-    const cmd = command.slice(5);
-    if(isShellBuiltin(cmd)) {
-      console.log(`${cmd} is a shell builtin`);
-    }
-    else {
-      const executablePath = findExecutable(cmd);
-      if(executablePath) {
-        console.log(`${cmd} is ${executablePath}`);
-      }
-      else {
-        console.log(`${cmd}: not found`);
-      }
+
+  const cmd = parsedCommand[0];
+  const args = parsedCommand.slice(1);
+
+  // Helper to handle built-in text output (either to screen or file)
+  function writeOut(text) {
+    if (targetFile) {
+      writeFileSync(targetFile, text + "\n");
+    } else {
+      console.log(text);
     }
   }
-  else if(command.startsWith("cat ")) {
-    const args = parseArguments(command.slice(4));
-    spawnSync('cat', args, { 
-      stdio: 'inherit'
+
+  // --- Command Routing ---
+  if (cmd === "exit") {
+    rl.close();
+    return;
+  } 
+  else if (cmd === "echo") {
+    writeOut(args.join(" "));
+  } 
+  else if (cmd === "type") {
+    const targetCmd = args[0];
+    if (isShellBuiltin(targetCmd)) {
+      writeOut(`${targetCmd} is a shell builtin`);
+    } else {
+      const executablePath = findExecutable(targetCmd);
+      if (executablePath) {
+        writeOut(`${targetCmd} is ${executablePath}`);
+      } else {
+        writeOut(`${targetCmd}: not found`);
+      }
+    }
+  } 
+  else if (cmd === "cat") {
+    let stdioOpt = "inherit";
+    if (targetFile) {
+      // route stdout (index 1) to the file descriptor
+      stdioOpt = ["inherit", openSync(targetFile, "w"), "inherit"];
+    }
+    spawnSync("cat", args, {
+      stdio: stdioOpt,
     });
-  }
-  else if(command === "pwd") {
-    console.log(process.cwd());    
-  }
-  else if(command.startsWith("cd ")) {
-    let dir = command.slice(3).trim();
-    if(dir === "~") dir = process.env.HOME;
+  } 
+  else if (cmd === "pwd") {
+    writeOut(process.cwd());
+  } 
+  else if (cmd === "cd") {
+    let dir = args[0] || "~";
+    if (dir === "~") dir = process.env.HOME;
     try {
       process.chdir(dir);
     } catch (error) {
-      console.log(`cd: ${dir}: No such file or directory`);      
+      console.log(`cd: ${dir}: No such file or directory`);
     }
-  }
+  } 
   else {
-    const parsedCommand = parseArguments(command);
-    
-    if (parsedCommand.length === 0) {
-      rl.prompt();
-      return;
-    }
-
-    const cmd = parsedCommand[0];
-    
-    const args = parsedCommand.slice(1);
-
     let executablePath = findExecutable(cmd);
-    
-    if(executablePath) {
-      spawnSync(executablePath, args, { argv0: cmd, stdio: 'inherit' });
-      rl.prompt();
-      return;
-    }
-    else {
+
+    if (executablePath) {
+      let stdioOpt = "inherit";
+      if (targetFile) {
+        stdioOpt = ["inherit", openSync(targetFile, "w"), "inherit"];
+      }
+      spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
+    } else {
       console.log(`${command}: command not found`);
     }
   }
+  
   rl.prompt();
-})
+});
