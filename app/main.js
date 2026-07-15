@@ -7,7 +7,20 @@ const rl = createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: "$ ",
+  completer: completer,
 });
+
+function completer(line) {
+  // 1. Define the commands we want to autocomplete
+  const builtins = ["echo", "type", "exit", "pwd", "cd"];
+  
+  // 2. Filter the commands that start with the current line
+  const hits = builtins.filter((cmd) => cmd.startsWith(line));
+
+  // 3. Return the matches and the original line
+  // If no hits are found, we return an empty array so readline does nothing
+  return [hits, line];
+}
 
 function isShellBuiltin(command) {
   const builtins = ["echo", "type", "exit", "pwd", "cd"];
