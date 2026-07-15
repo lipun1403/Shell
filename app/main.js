@@ -1,6 +1,6 @@
 import { createInterface } from "readline";
-import { delimiter, resolve } from "path";
-import { accessSync, constants, statSync, writeFileSync, openSync } from "fs";
+import { delimiter, resolve, join } from "path";
+import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync } from "fs";
 import { spawnSync } from "child_process";
 
 const rl = createInterface({
@@ -37,20 +37,20 @@ function getExternalExecutables(prefix) {
   const matches = new Set();
   const pathEnv = process.env.PATH || '';
   // Split the path (using ':' on Linux/macOS or ';' on Windows)
-  const dirs = pathEnv.split(path.delimiter);
+  const dirs = pathEnv.split(delimiter);
 
   for (const dir of dirs) {
     try {
-      if (!fs.existsSync(dir)) continue;
+      if (!existsSync(dir)) continue;
 
-      const files = fs.readdirSync(dir);
+      const files = readdirSync(dir);
       for (const file of files) {
         if (file.startsWith(prefix)) {
-          const filePath = path.join(dir, file);
+          const filePath = join(dir, file);
           try {
-            const stats = fs.statSync(filePath);
+            const stats = statSync(filePath);
             // Ensure it is a regular file and executable by the current user
-            const isExecutable = (stats.mode & fs.constants.S_IXUSR) !== 0;
+            const isExecutable = (stats.mode & constants.S_IXUSR) !== 0;
             if (stats.isFile() && isExecutable) {
               matches.add(file);
             }
