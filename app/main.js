@@ -119,6 +119,9 @@ rl.on("line", (command) => {
     parsedCommand.splice(outIndex, 2); // Remove '>' and the filename from arguments
   }
 
+  if (targetOutFile) writeFileSync(targetOutFile, "");
+  if (targetErrFile) writeFileSync(targetErrFile, "");
+
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
@@ -197,7 +200,7 @@ rl.on("line", (command) => {
 
       spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
     } else {
-      const errorMsg = `${command}: command not found`;
+      const errorMsg = `${cmd}: command not found`;
       if (targetErrFile) {
         writeFileSync(targetErrFile, errorMsg + "\n");
       } else {
