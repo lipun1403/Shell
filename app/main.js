@@ -103,25 +103,44 @@ rl.on("line", (command) => {
     return;
   }
 
-  let targetOutFile = null; 
+  let targetOutFile = null;
+  let outMode = "w"; // Default to write/overwrite
   let targetErrFile = null;
+  let errMode = "w"; // Default to write/overwrite
 
-  let errIndex = parsedCommand.findIndex((arg) => arg === "2>");
-  if (errIndex !== -1) {
-    targetErrFile = parsedCommand[errIndex + 1];
-    parsedCommand.splice(errIndex, 2); // Remove '2>' and the filename from arguments
+  // --- Extract Error Redirection ---
+  let errAppIndex = parsedCommand.findIndex((arg) => arg === "2>>");
+  if (errAppIndex !== -1) {
+    targetErrFile = parsedCommand[errAppIndex + 1];
+    errMode = "a"; // Set mode to append
+    parsedCommand.splice(errAppIndex, 2);
+  } else {
+    let errIndex = parsedCommand.findIndex((arg) => arg === "2>");
+    if (errIndex !== -1) {
+      targetErrFile = parsedCommand[errIndex + 1];
+      errMode = "w"; // Set mode to overwrite
+      parsedCommand.splice(errIndex, 2);
+    }
   }
 
-  // --- Extract > and target file once for all commands ---
-  let outIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
-  if (outIndex !== -1) {
-    targetOutFile = parsedCommand[outIndex + 1];
-    parsedCommand.splice(outIndex, 2); // Remove '>' and the filename from arguments
+  // --- Extract Output Redirection ---
+  let outAppIndex = parsedCommand.findIndex((arg) => arg === ">>" || arg === "1>>");
+  if (outAppIndex !== -1) {
+    targetOutFile = parsedCommand[outAppIndex + 1];
+    outMode = "a"; // Set mode to append
+    parsedCommand.splice(outAppIndex, 2);
+  } else {
+    let outIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
+    if (outIndex !== -1) {
+      targetOutFile = parsedCommand[outIndex + 1];
+      outMode = "w"; // Set mode to overwrite
+      parsedCommand.splice(outIndex, 2);
+    }
   }
 
-  if (targetOutFile) writeFileSync(targetOutFile, "");
-  if (targetErrFile) writeFileSync(targetErrFile, "");
-
+  // Create files immediately with the correct flag to prevent wiping appended files
+  if (targetOutFile) writeFileSync(targetOutFile, "", { flag: outMode });
+  if (targetErrFile) writeFileSync(targetErrFile, "", { flag: errMode });
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
@@ -129,7 +148,7 @@ rl.on("line", (command) => {
   // Helper to handle built-in text output (either to screen or file)
   function writeOut(text) {
     if (targetOutFile) {
-      writeFileSync(targetOutFile, text + "\n");
+      writeFileSync(targetOutFile, text + "\n", { flag: outMode });
     } else {
       console.log(text);
     }
@@ -160,10 +179,10 @@ rl.on("line", (command) => {
     let stdioOpt = ["inherit", "inherit", "inherit"];
     
     if (targetOutFile) {
-      stdioOpt[1] = openSync(targetOutFile, "w"); // Connect success pipe to file
+      stdioOpt[1] = openSync(targetOutFile, outMode); // Connect success pipe to file
     }
     if (targetErrFile) {
-      stdioOpt[2] = openSync(targetErrFile, "w"); // Connect error pipe to file
+      stdioOpt[2] = openSync(targetErrFile, errMode); // Connect error pipe to file
     }
 
     spawnSync("cat", args, { stdio: stdioOpt });
@@ -179,7 +198,7 @@ rl.on("line", (command) => {
     } catch (error) {
       const errorMsg = `cd: ${dir}: No such file or directory`;
       if (targetErrFile) {
-        writeFileSync(targetErrFile, errorMsg + "\n");
+        writeFileSync(targetErrFile, errorMsg + "\n", { flag: errMode });
       } else {
         console.log(errorMsg);
       }
@@ -192,17 +211,17 @@ rl.on("line", (command) => {
       let stdioOpt = ["inherit", "inherit", "inherit"];
       
       if (targetOutFile) {
-        stdioOpt[1] = openSync(targetOutFile, "w"); // Connect success pipe to file
+        stdioOpt[1] = openSync(targetOutFile, outMode); // Connect success pipe to file
       }
       if (targetErrFile) {
-        stdioOpt[2] = openSync(targetErrFile, "w"); // Connect error pipe to file
+        stdioOpt[2] = openSync(targetErrFile, errMode); // Connect error pipe to file
       }
 
       spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
     } else {
       const errorMsg = `${cmd}: command not found`;
       if (targetErrFile) {
-        writeFileSync(targetErrFile, errorMsg + "\n");
+        writeFileSync(targetErrFile, errorMsg + "\n", { flag: errMode });
       } else {
         console.log(errorMsg);
       }
