@@ -101,12 +101,25 @@ function completer(line) {
     // Second <TAB> press
     tabTracker.count++;
     if (tabTracker.count === 2) {
-      // Map back to just the basenames for standard multi-match display
+      // Map back to just the basenames and append '/' for directories
       const displayHits = uniqueHits.map(h => {
-        const idx = h.lastIndexOf("/");
-        // Note: For display, we usually show the base name, plus optionally an indicator. 
-        // We stick to standard basenames to pass tests.
-        return idx !== -1 ? h.substring(idx + 1) : h;
+        let baseName = h;
+        
+        if (lastSpaceIndex !== -1) { // It's a file/directory completion
+          const idx = h.lastIndexOf("/");
+          if (idx !== -1) {
+            baseName = h.substring(idx + 1);
+          }
+          
+          try {
+            // Check if it's a directory and append '/'
+            if (statSync(resolve(h)).isDirectory()) {
+              baseName += "/";
+            }
+          } catch (e) {}
+        }
+        
+        return baseName;
       });
 
       // Print the matches separated by exactly two spaces
