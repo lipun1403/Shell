@@ -24,9 +24,25 @@ function completer(line) {
     // 1A. Filename Completion (contains a space)
     prefix = line.substring(lastSpaceIndex + 1);
     linePrefix = line.substring(0, lastSpaceIndex + 1);
+    
+    let dirToSearch = process.cwd();
+    let filePrefix = prefix;
+    let pathPrefix = "";
+
+    // Check for nested path
+    if (prefix.includes("/")) {
+      const lastSlashIndex = prefix.lastIndexOf("/");
+      pathPrefix = prefix.substring(0, lastSlashIndex + 1); // e.g., "path/to/"
+      filePrefix = prefix.substring(lastSlashIndex + 1);    // e.g., "f"
+      dirToSearch = pathPrefix; 
+    }
+
     try {
-      const files = readdirSync(process.cwd());
-      uniqueHits = files.filter(f => f.startsWith(prefix)).sort();
+      const files = readdirSync(dirToSearch);
+      uniqueHits = files
+        .filter(f => f.startsWith(filePrefix))
+        .map(f => pathPrefix + f) // Prepend the path back onto the matches
+        .sort();
     } catch (e) {
       // Ignore directory read errors
     }
@@ -40,7 +56,6 @@ function completer(line) {
   // 2. Exact single match
   if (uniqueHits.length === 1) {
     tabTracker = { line: "", count: 0 }; // reset tracker
-    // Prepend the untouched part of the command, add the match, and let Node add the trailing space
     return [[linePrefix + uniqueHits[0] + " "], line]; 
   }
 
@@ -57,12 +72,11 @@ function completer(line) {
   // If the LCP is longer than what the user typed for this word, auto-fill the difference
   if (lcp.length > prefix.length) {
     tabTracker = { line: "", count: 0 }; 
-    // Write the remaining common characters directly to the buffer
     rl.write(lcp.slice(prefix.length));
     return [[], line]; 
   }
 
-  // 5. Multiple matches: LCP is maxed out (No progress can be made)
+  // 5. Multiple matches: LCP is maxed out
   if (tabTracker.line !== line) {
     // First <TAB> press
     tabTracker.line = line;
@@ -73,8 +87,14 @@ function completer(line) {
     // Second <TAB> press
     tabTracker.count++;
     if (tabTracker.count === 2) {
+      // Map back to just the basenames for standard multi-match display
+      const displayHits = uniqueHits.map(h => {
+        const idx = h.lastIndexOf("/");
+        return idx !== -1 ? h.substring(idx + 1) : h;
+      });
+
       // Print the matches separated by exactly two spaces
-      process.stdout.write("\n" + uniqueHits.join("  ") + "\n");
+      process.stdout.write("\n" + displayHits.join("  ") + "\n");
       
       // Re-print the prompt and the user's current line
       process.stdout.write(rl.getPrompt() + line);
