@@ -14,42 +14,57 @@ const builtins = ["echo", "type", "exit", "pwd", "cd"];
 let tabTracker = { line: "", count: 0 };
 
 function completer(line) {
-  // 1. Gather all candidates starting with the current input
-  const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
-  const externalHits = getExternalExecutables(line);
+  const lastSpaceIndex = line.lastIndexOf(" ");
+  
+  let uniqueHits = [];
+  let prefix = line; // What we are trying to autocomplete
+  let linePrefix = ""; // The portion of the command we shouldn't touch
 
-  // 2. Combine and deduplicate using a Set, then sort alphabetically
-  const uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
-
-  // 3. Exact single match
-  if (uniqueHits.length === 1) {
-    tabTracker = { line: "", count: 0 }; // reset tracker
-    return [[uniqueHits[0] + " "], line];
+  if (lastSpaceIndex !== -1) {
+    // 1A. Filename Completion (contains a space)
+    prefix = line.substring(lastSpaceIndex + 1);
+    linePrefix = line.substring(0, lastSpaceIndex + 1);
+    try {
+      const files = readdirSync(process.cwd());
+      uniqueHits = files.filter(f => f.startsWith(prefix)).sort();
+    } catch (e) {
+      // Ignore directory read errors
+    }
+  } else {
+    // 1B. Command Completion (no spaces)
+    const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
+    const externalHits = getExternalExecutables(line);
+    uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
   }
 
-  // 4. No matches
+  // 2. Exact single match
+  if (uniqueHits.length === 1) {
+    tabTracker = { line: "", count: 0 }; // reset tracker
+    // Prepend the untouched part of the command, add the match, and let Node add the trailing space
+    return [[linePrefix + uniqueHits[0] + " "], line]; 
+  }
+
+  // 3. No matches
   if (uniqueHits.length === 0) {
     tabTracker = { line: "", count: 0 }; // reset tracker
     process.stdout.write("\x07"); 
     return [[], line]; 
   }
 
-  // 5. Multiple Matches: Check for Longest Common Prefix (LCP)
+  // 4. Multiple Matches: Check for Longest Common Prefix (LCP)
   const lcp = getLongestCommonPrefix(uniqueHits);
 
-  // If the LCP is longer than what the user typed, we can auto-fill the difference!
-  if (lcp.length > line.length) {
-    tabTracker = { line: "", count: 0 }; // reset tracker since input is progressing
-    
-    // Write the remaining common characters directly to the input buffer
-    rl.write(lcp.slice(line.length));
-    
-    return [[], line]; // Tell readline to do nothing else
+  // If the LCP is longer than what the user typed for this word, auto-fill the difference
+  if (lcp.length > prefix.length) {
+    tabTracker = { line: "", count: 0 }; 
+    // Write the remaining common characters directly to the buffer
+    rl.write(lcp.slice(prefix.length));
+    return [[], line]; 
   }
 
-  // 6. Multiple matches: LCP is exactly what the user typed (No progress can be made)
+  // 5. Multiple matches: LCP is maxed out (No progress can be made)
   if (tabTracker.line !== line) {
-    // First <TAB> press where LCP is maxed out
+    // First <TAB> press
     tabTracker.line = line;
     tabTracker.count = 1;
     process.stdout.write("\x07"); // Ring bell
@@ -61,7 +76,7 @@ function completer(line) {
       // Print the matches separated by exactly two spaces
       process.stdout.write("\n" + uniqueHits.join("  ") + "\n");
       
-      // Re-print the prompt and the user's current line on the new line
+      // Re-print the prompt and the user's current line
       process.stdout.write(rl.getPrompt() + line);
       
       tabTracker.count = 0; // Reset so a 3rd tab acts like a 1st tab
