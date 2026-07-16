@@ -397,6 +397,7 @@ rl.on("line", (command) => {
       return;
     }
 
+    // 1. Registering completions
     if (args[0] === "-C" && args.length >= 3) {
       const scriptPath = args[1].replace(/^['"]|['"]$/g, '');
       
@@ -405,6 +406,7 @@ rl.on("line", (command) => {
         registeredCompletions.set(targetCommand, scriptPath);
       }
     } 
+    // 2. Displaying all registered completions
     else if (args[0] === "-p" && args.length === 1) {
       if (registeredCompletions.size > 0) {
         const sortedCommands = Array.from(registeredCompletions.keys()).sort();
@@ -415,6 +417,7 @@ rl.on("line", (command) => {
         }
       }
     }
+    // 3. Displaying a specific completion
     else if (args[0] === "-p" && args.length === 2) {
       const targetCommand = args[1].replace(/^['"]|['"]$/g, '');
       
@@ -423,6 +426,19 @@ rl.on("line", (command) => {
         writeOut(`complete -C '${scriptPath}' ${targetCommand}`);
       } else {
         writeOut(`complete: ${targetCommand}: no completion specification`);
+      }
+    }
+    // 4. Unregistering completions (-r)
+    else if (args[0] === "-r" && args.length >= 2) {
+      for (let i = 1; i < args.length; i++) {
+        const targetCommand = args[i].replace(/^['"]|['"]$/g, '');
+        
+        if (registeredCompletions.has(targetCommand)) {
+          registeredCompletions.delete(targetCommand);
+        } else {
+          // Emulate standard bash error if it doesn't exist
+          writeOut(`complete: ${targetCommand}: no completion specification`);
+        }
       }
     }
   }
