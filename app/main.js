@@ -19,26 +19,24 @@ function completer(line) {
   const words = line.split(" ");
   
   // =========================================================================
-  // 1. CUSTOM SCRIPT COMPLETION (Intercepts before standard completion)
+  // 1. CUSTOM SCRIPT COMPLETION
   // =========================================================================
   if (words.length > 1) {
     const command = words[0];
     const currentWord = words[words.length - 1];
     
-    // Check if we have a script registered for this command
     if (registeredCompletions.has(command)) {
       const scriptPath = registeredCompletions.get(command);
       
       try {
         const previousWord = words[words.length - 2] || "";
         
-        // Setup standard Bash environment variables that many completion scripts require
+        // Bash completion scripts require these environment variables to work
         const env = Object.assign({}, process.env, {
           COMP_LINE: line,
           COMP_POINT: line.length.toString()
         });
         
-        // Run the registered script
         const result = spawnSync(scriptPath, [command, currentWord, previousWord], { 
           encoding: "utf8",
           env: env
@@ -48,17 +46,15 @@ function completer(line) {
           const output = result.stdout.trim();
           
           if (output) {
-            // Construct the final completed line (e.g., "git " + "add" => "git add")
-            const completedLine = line.slice(0, line.length - currentWord.length) + output;
+            // Manually write the missing characters + a trailing space
+            rl.write(output.slice(currentWord.length) + " ");
             
-            // Return the completed line. Node's readline will replace the current line 
-            // with this one and automatically append a trailing space for us.
-            return [[completedLine], line];
+            // Return empty hits to prevent Node's default autocomplete
+            return [[], line];
           }
         }
       } catch (err) {
-        // If the script fails or doesn't exist, silently fall through 
-        // to your default completion behavior below.
+        // Silently fall through to default completion
       }
     }
   }
@@ -69,21 +65,20 @@ function completer(line) {
   const lastSpaceIndex = line.lastIndexOf(" ");
   
   let uniqueHits = [];
-  let prefix = line; // What we are trying to autocomplete
+  let prefix = line; 
 
   if (lastSpaceIndex !== -1) {
-    // 2A. Filename/Directory Completion (contains a space)
+    // 2A. Filename/Directory Completion
     prefix = line.substring(lastSpaceIndex + 1);
     
     let dirToSearch = process.cwd();
     let filePrefix = prefix;
     let pathPrefix = "";
 
-    // Check for nested path
     if (prefix.includes("/")) {
       const lastSlashIndex = prefix.lastIndexOf("/");
-      pathPrefix = prefix.substring(0, lastSlashIndex + 1); // e.g., "path/to/"
-      filePrefix = prefix.substring(lastSlashIndex + 1);    // e.g., "f"
+      pathPrefix = prefix.substring(0, lastSlashIndex + 1); 
+      filePrefix = prefix.substring(lastSlashIndex + 1);    
       dirToSearch = pathPrefix; 
     }
 
@@ -91,13 +86,13 @@ function completer(line) {
       const files = readdirSync(dirToSearch);
       uniqueHits = files
         .filter(f => f.startsWith(filePrefix))
-        .map(f => pathPrefix + f) // Prepend the path back onto the matches
+        .map(f => pathPrefix + f)
         .sort();
     } catch (e) {
-      // Ignore directory read errors
+      // Ignore
     }
   } else {
-    // 2B. Command Completion (no spaces)
+    // 2B. Command Completion
     const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
     const externalHits = getExternalExecutables(line);
     uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
@@ -105,11 +100,10 @@ function completer(line) {
 
   // 3. Exact single match
   if (uniqueHits.length === 1) {
-    tabTracker = { line: "", count: 0 }; // reset tracker
+    tabTracker = { line: "", count: 0 }; 
     let match = uniqueHits[0];
-    let appendChar = " "; // default to space for files/commands
+    let appendChar = " "; 
     
-    // Check if the match is a directory
     if (lastSpaceIndex !== -1) {
       try {
         if (statSync(resolve(match)).isDirectory()) {
@@ -118,71 +112,56 @@ function completer(line) {
       } catch (e) {}
     }
     
-    // Write the remaining characters + the correct append character (space or slash)
     rl.write(match.slice(prefix.length) + appendChar);
-    
-    // Return empty so Node's readline doesn't automatically add its own space
     return [[], line]; 
   }
 
   // 4. No matches
   if (uniqueHits.length === 0) {
-    tabTracker = { line: "", count: 0 }; // reset tracker
+    tabTracker = { line: "", count: 0 }; 
     process.stdout.write("\x07"); 
     return [[], line]; 
   }
 
-  // 5. Multiple Matches: Check for Longest Common Prefix (LCP)
+  // 5. Multiple Matches: Longest Common Prefix
   const lcp = getLongestCommonPrefix(uniqueHits);
 
-  // If the LCP is longer than what the user typed for this word, auto-fill the difference
   if (lcp.length > prefix.length) {
     tabTracker = { line: "", count: 0 }; 
     rl.write(lcp.slice(prefix.length));
     return [[], line]; 
   }
 
-  // 6. Multiple matches: LCP is maxed out
+  // 6. Multiple matches: Print hits
   if (tabTracker.line !== line) {
-    // First <TAB> press
     tabTracker.line = line;
     tabTracker.count = 1;
-    process.stdout.write("\x07"); // Ring bell
+    process.stdout.write("\x07"); 
     return [[], line];
   } else {
-    // Second <TAB> press
     tabTracker.count++;
     if (tabTracker.count === 2) {
-      // Map back to just the basenames and append '/' for directories
       const displayHits = uniqueHits.map(h => {
         let baseName = h;
         
-        if (lastSpaceIndex !== -1) { // It's a file/directory completion
+        if (lastSpaceIndex !== -1) { 
           const idx = h.lastIndexOf("/");
           if (idx !== -1) {
             baseName = h.substring(idx + 1);
           }
-          
           try {
-            // Check if it's a directory and append '/'
             if (statSync(resolve(h)).isDirectory()) {
               baseName += "/";
             }
           } catch (e) {}
         }
-        
         return baseName;
       });
 
-      // Print the matches separated by exactly two spaces
       process.stdout.write("\n" + displayHits.join("  ") + "\n");
-      
-      // Re-print the prompt and the user's current line
       process.stdout.write(rl.getPrompt() + line);
-      
-      tabTracker.count = 0; // Reset so a 3rd tab acts like a 1st tab
+      tabTracker.count = 0; 
     }
-    
     return [[], line];
   }
 }
@@ -202,7 +181,6 @@ function getLongestCommonPrefix(words) {
 function getExternalExecutables(prefix) {
   const matches = new Set();
   const pathEnv = process.env.PATH || '';
-  // Split the path (using ':' on Linux/macOS or ';' on Windows)
   const dirs = pathEnv.split(delimiter);
 
   for (const dir of dirs) {
@@ -215,21 +193,15 @@ function getExternalExecutables(prefix) {
           const filePath = join(dir, file);
           try {
             const stats = statSync(filePath);
-            // Ensure it is a regular file and executable by the current user
             const isExecutable = (stats.mode & constants.S_IXUSR) !== 0;
             if (stats.isFile() && isExecutable) {
               matches.add(file);
             }
-          } catch (e) {
-            // Skip files we can't stat due to permissions
-          }
+          } catch (e) { }
         }
       }
-    } catch (e) {
-      // Skip directories we can't read
-    }
+    } catch (e) { }
   }
-
   return Array.from(matches);
 }
 
@@ -312,7 +284,6 @@ function parseArguments(input) {
   if (hasWord) {
     args.push(currentWord);
   }
-
   return args;
 }
 
@@ -327,48 +298,44 @@ rl.on("line", (command) => {
   }
 
   let targetOutFile = null;
-  let outMode = "w"; // Default to write/overwrite
+  let outMode = "w"; 
   let targetErrFile = null;
-  let errMode = "w"; // Default to write/overwrite
+  let errMode = "w"; 
 
-  // --- Extract Error Redirection ---
   let errAppIndex = parsedCommand.findIndex((arg) => arg === "2>>");
   if (errAppIndex !== -1) {
     targetErrFile = parsedCommand[errAppIndex + 1];
-    errMode = "a"; // Set mode to append
+    errMode = "a"; 
     parsedCommand.splice(errAppIndex, 2);
   } else {
     let errIndex = parsedCommand.findIndex((arg) => arg === "2>");
     if (errIndex !== -1) {
       targetErrFile = parsedCommand[errIndex + 1];
-      errMode = "w"; // Set mode to overwrite
+      errMode = "w"; 
       parsedCommand.splice(errIndex, 2);
     }
   }
 
-  // --- Extract Output Redirection ---
   let outAppIndex = parsedCommand.findIndex((arg) => arg === ">>" || arg === "1>>");
   if (outAppIndex !== -1) {
     targetOutFile = parsedCommand[outAppIndex + 1];
-    outMode = "a"; // Set mode to append
+    outMode = "a"; 
     parsedCommand.splice(outAppIndex, 2);
   } else {
     let outIndex = parsedCommand.findIndex((arg) => arg === ">" || arg === "1>");
     if (outIndex !== -1) {
       targetOutFile = parsedCommand[outIndex + 1];
-      outMode = "w"; // Set mode to overwrite
+      outMode = "w"; 
       parsedCommand.splice(outIndex, 2);
     }
   }
 
-  // Create files immediately with the correct flag to prevent wiping appended files
   if (targetOutFile) writeFileSync(targetOutFile, "", { flag: outMode });
   if (targetErrFile) writeFileSync(targetErrFile, "", { flag: errMode });
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
 
-  // Helper to handle built-in text output (either to screen or file)
   function writeOut(text) {
     if (targetOutFile) {
       writeFileSync(targetOutFile, text + "\n", { flag: outMode });
@@ -377,7 +344,6 @@ rl.on("line", (command) => {
     }
   }
 
-  // --- Command Routing ---
   if (cmd === "exit") {
     rl.close();
     return;
@@ -401,12 +367,8 @@ rl.on("line", (command) => {
   else if (cmd === "cat") {
     let stdioOpt = ["inherit", "inherit", "inherit"];
     
-    if (targetOutFile) {
-      stdioOpt[1] = openSync(targetOutFile, outMode); // Connect success pipe to file
-    }
-    if (targetErrFile) {
-      stdioOpt[2] = openSync(targetErrFile, errMode); // Connect error pipe to file
-    }
+    if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
+    if (targetErrFile) stdioOpt[2] = openSync(targetErrFile, errMode); 
 
     spawnSync("cat", args, { stdio: stdioOpt });
   } 
@@ -433,9 +395,7 @@ rl.on("line", (command) => {
       return;
     }
 
-    // 1. Registering completions
     if (args[0] === "-C" && args.length >= 3) {
-      // Strip outer quotes in case the argument parser missed them
       const scriptPath = args[1].replace(/^['"]|['"]$/g, '');
       
       for (let i = 2; i < args.length; i++) {
@@ -443,8 +403,6 @@ rl.on("line", (command) => {
         registeredCompletions.set(targetCommand, scriptPath);
       }
     } 
-    
-    // 2. Displaying all registered completions
     else if (args[0] === "-p" && args.length === 1) {
       if (registeredCompletions.size > 0) {
         const sortedCommands = Array.from(registeredCompletions.keys()).sort();
@@ -455,8 +413,6 @@ rl.on("line", (command) => {
         }
       }
     }
-    
-    // 3. Displaying a specific completion
     else if (args[0] === "-p" && args.length === 2) {
       const targetCommand = args[1].replace(/^['"]|['"]$/g, '');
       
@@ -474,12 +430,8 @@ rl.on("line", (command) => {
     if (executablePath) {
       let stdioOpt = ["inherit", "inherit", "inherit"];
       
-      if (targetOutFile) {
-        stdioOpt[1] = openSync(targetOutFile, outMode); // Connect success pipe to file
-      }
-      if (targetErrFile) {
-        stdioOpt[2] = openSync(targetErrFile, errMode); // Connect error pipe to file
-      }
+      if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
+      if (targetErrFile) stdioOpt[2] = openSync(targetErrFile, errMode); 
 
       spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
     } else {
