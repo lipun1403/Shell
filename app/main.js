@@ -17,7 +17,12 @@ const registeredCompletions = new Map();
 
 function completer(line) {
   const words = line.split(" ");
+  const lastSpaceIndex = line.lastIndexOf(" ");
   
+  let uniqueHits = [];
+  let prefix = line; 
+  let customScriptHandled = false;
+
   // =========================================================================
   // 1. CUSTOM SCRIPT COMPLETION
   // =========================================================================
@@ -30,8 +35,6 @@ function completer(line) {
       
       try {
         const previousWord = words[words.length - 2] || "";
-        
-        // Bash completion scripts require these environment variables to work
         const env = Object.assign({}, process.env, {
           COMP_LINE: line,
           COMP_POINT: line.length.toString()
@@ -44,13 +47,11 @@ function completer(line) {
         
         if (result.stdout) {
           const output = result.stdout.trim();
-          
           if (output) {
-            // Manually write the missing characters + a trailing space
-            rl.write(output.slice(currentWord.length) + " ");
-            
-            // Return empty hits to prevent Node's default autocomplete
-            return [[], line];
+            // Split by newline to support multiple candidate matches!
+            uniqueHits = output.split(/\r?\n/).map(c => c.trim()).filter(c => c).sort();
+            prefix = currentWord;
+            customScriptHandled = true; // Tell Step 2 to skip
           }
         }
       } catch (err) {
@@ -60,43 +61,42 @@ function completer(line) {
   }
 
   // =========================================================================
-  // 2. STANDARD COMPLETION
+  // 2. STANDARD COMPLETION (Only runs if custom script yielded nothing)
   // =========================================================================
-  const lastSpaceIndex = line.lastIndexOf(" ");
-  
-  let uniqueHits = [];
-  let prefix = line; 
+  if (!customScriptHandled) {
+    if (lastSpaceIndex !== -1) {
+      // 2A. Filename/Directory Completion
+      prefix = line.substring(lastSpaceIndex + 1);
+      
+      let dirToSearch = process.cwd();
+      let filePrefix = prefix;
+      let pathPrefix = "";
 
-  if (lastSpaceIndex !== -1) {
-    // 2A. Filename/Directory Completion
-    prefix = line.substring(lastSpaceIndex + 1);
-    
-    let dirToSearch = process.cwd();
-    let filePrefix = prefix;
-    let pathPrefix = "";
+      if (prefix.includes("/")) {
+        const lastSlashIndex = prefix.lastIndexOf("/");
+        pathPrefix = prefix.substring(0, lastSlashIndex + 1); 
+        filePrefix = prefix.substring(lastSlashIndex + 1);    
+        dirToSearch = pathPrefix; 
+      }
 
-    if (prefix.includes("/")) {
-      const lastSlashIndex = prefix.lastIndexOf("/");
-      pathPrefix = prefix.substring(0, lastSlashIndex + 1); 
-      filePrefix = prefix.substring(lastSlashIndex + 1);    
-      dirToSearch = pathPrefix; 
+      try {
+        const files = readdirSync(dirToSearch);
+        uniqueHits = files
+          .filter(f => f.startsWith(filePrefix))
+          .map(f => pathPrefix + f)
+          .sort();
+      } catch (e) {}
+    } else {
+      // 2B. Command Completion
+      const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
+      const externalHits = getExternalExecutables(line);
+      uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
     }
-
-    try {
-      const files = readdirSync(dirToSearch);
-      uniqueHits = files
-        .filter(f => f.startsWith(filePrefix))
-        .map(f => pathPrefix + f)
-        .sort();
-    } catch (e) {
-      // Ignore
-    }
-  } else {
-    // 2B. Command Completion
-    const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
-    const externalHits = getExternalExecutables(line);
-    uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
   }
+
+  // =========================================================================
+  // 3-6. UNIFIED HIT HANDLING (Applies to Scripts, Files, and Commands)
+  // =========================================================================
 
   // 3. Exact single match
   if (uniqueHits.length === 1) {
@@ -104,7 +104,8 @@ function completer(line) {
     let match = uniqueHits[0];
     let appendChar = " "; 
     
-    if (lastSpaceIndex !== -1) {
+    // Only check for directory slashes if it was a standard file completion
+    if (!customScriptHandled && lastSpaceIndex !== -1) {
       try {
         if (statSync(resolve(match)).isDirectory()) {
           appendChar = "/";
@@ -123,7 +124,7 @@ function completer(line) {
     return [[], line]; 
   }
 
-  // 5. Multiple Matches: Longest Common Prefix
+  // 5. Multiple Matches: Longest Common Prefix (LCP)
   const lcp = getLongestCommonPrefix(uniqueHits);
 
   if (lcp.length > prefix.length) {
@@ -132,7 +133,7 @@ function completer(line) {
     return [[], line]; 
   }
 
-  // 6. Multiple matches: Print hits
+  // 6. Multiple matches: Print hits on double tab
   if (tabTracker.line !== line) {
     tabTracker.line = line;
     tabTracker.count = 1;
@@ -144,7 +145,8 @@ function completer(line) {
       const displayHits = uniqueHits.map(h => {
         let baseName = h;
         
-        if (lastSpaceIndex !== -1) { 
+        // Strip paths and add directory slashes ONLY for standard file completions
+        if (!customScriptHandled && lastSpaceIndex !== -1) { 
           const idx = h.lastIndexOf("/");
           if (idx !== -1) {
             baseName = h.substring(idx + 1);
