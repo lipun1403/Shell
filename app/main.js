@@ -378,18 +378,25 @@ rl.on("line", (command) => {
       }
     }
   } 
-  else if(cmd == "complete") {
+  else if(cmd === "complete") {
     // Example 1: Registering a completer (complete -C /path/to/script git)
-    if (args[0] === "-C" && args.length === 3) {
+    if (args[0] === "-C" && args.length >= 3) {
       const scriptPath = args[1];
-      const targetCommand = args[2];
-      registeredCompletions.set(targetCommand, scriptPath);
+      for (let i = 2; i < args.length; i++) {
+        registeredCompletions.set(args[i], scriptPath);
+      }
     } 
     
     // Example 2: Printing all completers (complete -p)
     else if (args[0] === "-p" && args.length === 1) {
-      if (registeredCompletions.size === 0) {
-        // Bash usually prints nothing if empty, or you can handle it as needed
+      if (registeredCompletions.size > 0) {
+        // Bash typically outputs these in alphabetical order
+        const sortedCommands = Array.from(registeredCompletions.keys()).sort();
+        
+        for (const targetCommand of sortedCommands) {
+          const scriptPath = registeredCompletions.get(targetCommand);
+          writeOut(`complete -C ${scriptPath} ${targetCommand}`);
+        }
       } else {
         registeredCompletions.forEach((scriptPath, targetCommand) => {
           writeOut(`complete -C ${scriptPath} ${targetCommand}`);
