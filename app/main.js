@@ -30,21 +30,30 @@ function completer(line) {
       const scriptPath = registeredCompletions.get(command);
       
       try {
-        const { spawnSync } = require("child_process");
         const previousWord = words[words.length - 2] || "";
+        
+        // Setup standard Bash environment variables that many completion scripts require
+        const env = Object.assign({}, process.env, {
+          COMP_LINE: line,
+          COMP_POINT: line.length.toString()
+        });
         
         // Run the registered script
         const result = spawnSync(scriptPath, [command, currentWord, previousWord], { 
-          encoding: "utf8" 
+          encoding: "utf8",
+          env: env
         });
         
         if (result.stdout) {
           const output = result.stdout.trim();
           
           if (output) {
-            rl.write(output.slice(currentWord.length) + " ");
+            // Construct the final completed line (e.g., "git " + "add" => "git add")
+            const completedLine = line.slice(0, line.length - currentWord.length) + output;
             
-            return [[], line];
+            // Return the completed line. Node's readline will replace the current line 
+            // with this one and automatically append a trailing space for us.
+            return [[completedLine], line];
           }
         }
       } catch (err) {
@@ -54,13 +63,16 @@ function completer(line) {
     }
   }
 
+  // =========================================================================
+  // 2. STANDARD COMPLETION
+  // =========================================================================
   const lastSpaceIndex = line.lastIndexOf(" ");
   
   let uniqueHits = [];
   let prefix = line; // What we are trying to autocomplete
 
   if (lastSpaceIndex !== -1) {
-    // 1A. Filename/Directory Completion (contains a space)
+    // 2A. Filename/Directory Completion (contains a space)
     prefix = line.substring(lastSpaceIndex + 1);
     
     let dirToSearch = process.cwd();
@@ -85,13 +97,13 @@ function completer(line) {
       // Ignore directory read errors
     }
   } else {
-    // 1B. Command Completion (no spaces)
+    // 2B. Command Completion (no spaces)
     const builtinHits = builtins.filter((cmd) => cmd.startsWith(line));
     const externalHits = getExternalExecutables(line);
     uniqueHits = Array.from(new Set([...builtinHits, ...externalHits])).sort();
   }
 
-  // 2. Exact single match
+  // 3. Exact single match
   if (uniqueHits.length === 1) {
     tabTracker = { line: "", count: 0 }; // reset tracker
     let match = uniqueHits[0];
@@ -113,14 +125,14 @@ function completer(line) {
     return [[], line]; 
   }
 
-  // 3. No matches
+  // 4. No matches
   if (uniqueHits.length === 0) {
     tabTracker = { line: "", count: 0 }; // reset tracker
     process.stdout.write("\x07"); 
     return [[], line]; 
   }
 
-  // 4. Multiple Matches: Check for Longest Common Prefix (LCP)
+  // 5. Multiple Matches: Check for Longest Common Prefix (LCP)
   const lcp = getLongestCommonPrefix(uniqueHits);
 
   // If the LCP is longer than what the user typed for this word, auto-fill the difference
@@ -130,7 +142,7 @@ function completer(line) {
     return [[], line]; 
   }
 
-  // 5. Multiple matches: LCP is maxed out
+  // 6. Multiple matches: LCP is maxed out
   if (tabTracker.line !== line) {
     // First <TAB> press
     tabTracker.line = line;
@@ -222,7 +234,6 @@ function getExternalExecutables(prefix) {
 }
 
 function isShellBuiltin(command) {
-  // const builtins = ["echo", "type", "exit", "pwd", "cd"];
   return builtins.includes(command);
 }
 
@@ -417,7 +428,10 @@ rl.on("line", (command) => {
     }
   } 
   else if (cmd === "complete") {
-    if (args.length === 0) return;
+    if (args.length === 0) {
+      rl.prompt();
+      return;
+    }
 
     // 1. Registering completions
     if (args[0] === "-C" && args.length >= 3) {
@@ -437,7 +451,6 @@ rl.on("line", (command) => {
         
         for (const targetCommand of sortedCommands) {
           const scriptPath = registeredCompletions.get(targetCommand);
-          // Notice the added single quotes around ${scriptPath}
           writeOut(`complete -C '${scriptPath}' ${targetCommand}`);
         }
       }
@@ -449,7 +462,6 @@ rl.on("line", (command) => {
       
       if (registeredCompletions.has(targetCommand)) {
         const scriptPath = registeredCompletions.get(targetCommand);
-        // Notice the added single quotes around ${scriptPath}
         writeOut(`complete -C '${scriptPath}' ${targetCommand}`);
       } else {
         writeOut(`complete: ${targetCommand}: no completion specification`);
