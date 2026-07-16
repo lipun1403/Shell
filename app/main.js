@@ -409,7 +409,7 @@ rl.on("line", (command) => {
       const targetCommand = args[1];
       if (registeredCompletions.has(targetCommand)) {
         const scriptPath = registeredCompletions.get(targetCommand);
-        writeOut(`complete -C ${scriptPath} ${targetCommand}`);
+        writeOut(`complete -C ${scriptPath} '${targetCommand}'`);
       } else {
         // Standard bash error for missing completion
         writeOut(`complete: ${targetCommand}: no completion specification`);
