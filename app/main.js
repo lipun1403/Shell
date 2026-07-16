@@ -42,9 +42,9 @@ function completer(line) {
           const output = result.stdout.trim();
           
           if (output) {
-             // Return the exact line the script gave us.
-             // Node will automatically replace 'currentWord' and append a space.
-            return [[output], currentWord];
+            rl.write(output.slice(currentWord.length) + " ");
+            
+            return [[], line];
           }
         }
       } catch (err) {
