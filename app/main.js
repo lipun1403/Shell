@@ -378,40 +378,42 @@ rl.on("line", (command) => {
       }
     }
   } 
-  else if(cmd === "complete") {
-    // Example 1: Registering a completer (complete -C /path/to/script git)
+  else if (cmd === "complete") {
+    if (args.length === 0) return;
+
+    // 1. Registering completions
     if (args[0] === "-C" && args.length >= 3) {
-      const scriptPath = args[1];
+      // Strip outer quotes in case the argument parser missed them
+      const scriptPath = args[1].replace(/^['"]|['"]$/g, '');
+      
       for (let i = 2; i < args.length; i++) {
-        registeredCompletions.set(args[i], scriptPath);
+        const targetCommand = args[i].replace(/^['"]|['"]$/g, '');
+        registeredCompletions.set(targetCommand, scriptPath);
       }
     } 
     
-    // Example 2: Printing all completers (complete -p)
+    // 2. Displaying all registered completions
     else if (args[0] === "-p" && args.length === 1) {
       if (registeredCompletions.size > 0) {
-        // Bash typically outputs these in alphabetical order
         const sortedCommands = Array.from(registeredCompletions.keys()).sort();
         
         for (const targetCommand of sortedCommands) {
           const scriptPath = registeredCompletions.get(targetCommand);
-          writeOut(`complete -C ${scriptPath} ${targetCommand}`);
+          // Notice the added single quotes around ${scriptPath}
+          writeOut(`complete -C '${scriptPath}' ${targetCommand}`);
         }
-      } else {
-        registeredCompletions.forEach((scriptPath, targetCommand) => {
-          writeOut(`complete -C ${scriptPath} ${targetCommand}`);
-        });
       }
     }
     
-    // Example 3: Printing a specific completer (complete -p git)
+    // 3. Displaying a specific completion
     else if (args[0] === "-p" && args.length === 2) {
-      const targetCommand = args[1];
+      const targetCommand = args[1].replace(/^['"]|['"]$/g, '');
+      
       if (registeredCompletions.has(targetCommand)) {
         const scriptPath = registeredCompletions.get(targetCommand);
-        writeOut(`complete -C ${scriptPath} '${targetCommand}'`);
+        // Notice the added single quotes around ${scriptPath}
+        writeOut(`complete -C '${scriptPath}' ${targetCommand}`);
       } else {
-        // Standard bash error for missing completion
         writeOut(`complete: ${targetCommand}: no completion specification`);
       }
     }
