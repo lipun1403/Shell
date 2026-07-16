@@ -10,7 +10,7 @@ const rl = createInterface({
   completer: completer,
 });
 
-const builtins = ["echo", "type", "exit", "pwd", "cd"];
+const builtins = ["echo", "type", "exit", "pwd", "cd", "complete"];
 let tabTracker = { line: "", count: 0 };
 
 function completer(line) {
@@ -376,6 +376,9 @@ rl.on("line", (command) => {
       }
     }
   } 
+  else if(cmd == "complete") {
+    
+  }
   else {
     let executablePath = findExecutable(cmd);
 
