@@ -16,6 +16,44 @@ let tabTracker = { line: "", count: 0 };
 const registeredCompletions = new Map();
 
 function completer(line) {
+  const words = line.split(" ");
+  
+  // =========================================================================
+  // 1. CUSTOM SCRIPT COMPLETION (Intercepts before standard completion)
+  // =========================================================================
+  if (words.length > 1) {
+    const command = words[0];
+    const currentWord = words[words.length - 1];
+    
+    // Check if we have a script registered for this command
+    if (registeredCompletions.has(command)) {
+      const scriptPath = registeredCompletions.get(command);
+      
+      try {
+        const { spawnSync } = require("child_process");
+        const previousWord = words[words.length - 2] || "";
+        
+        // Run the registered script
+        const result = spawnSync(scriptPath, [command, currentWord, previousWord], { 
+          encoding: "utf8" 
+        });
+        
+        if (result.stdout) {
+          const output = result.stdout.trim();
+          
+          if (output) {
+             // Return the exact line the script gave us.
+             // Node will automatically replace 'currentWord' and append a space.
+            return [[output], currentWord];
+          }
+        }
+      } catch (err) {
+        // If the script fails or doesn't exist, silently fall through 
+        // to your default completion behavior below.
+      }
+    }
+  }
+
   const lastSpaceIndex = line.lastIndexOf(" ");
   
   let uniqueHits = [];
