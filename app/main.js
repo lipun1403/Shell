@@ -13,6 +13,8 @@ const rl = createInterface({
 const builtins = ["echo", "type", "exit", "pwd", "cd", "complete"];
 let tabTracker = { line: "", count: 0 };
 
+const registeredCompletions = new Map();
+
 function completer(line) {
   const lastSpaceIndex = line.lastIndexOf(" ");
   
