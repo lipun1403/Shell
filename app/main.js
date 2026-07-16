@@ -377,7 +377,35 @@ rl.on("line", (command) => {
     }
   } 
   else if(cmd == "complete") {
+    // Example 1: Registering a completer (complete -C /path/to/script git)
+    if (args[0] === "-C" && args.length === 3) {
+      const scriptPath = args[1];
+      const targetCommand = args[2];
+      registeredCompletions.set(targetCommand, scriptPath);
+    } 
     
+    // Example 2: Printing all completers (complete -p)
+    else if (args[0] === "-p" && args.length === 1) {
+      if (registeredCompletions.size === 0) {
+        // Bash usually prints nothing if empty, or you can handle it as needed
+      } else {
+        registeredCompletions.forEach((scriptPath, targetCommand) => {
+          writeOut(`complete -C ${scriptPath} ${targetCommand}`);
+        });
+      }
+    }
+    
+    // Example 3: Printing a specific completer (complete -p git)
+    else if (args[0] === "-p" && args.length === 2) {
+      const targetCommand = args[1];
+      if (registeredCompletions.has(targetCommand)) {
+        const scriptPath = registeredCompletions.get(targetCommand);
+        writeOut(`complete -C ${scriptPath} ${targetCommand}`);
+      } else {
+        // Standard bash error for missing completion
+        writeOut(`complete: ${targetCommand}: no completion specification`);
+      }
+    }
   }
   else {
     let executablePath = findExecutable(cmd);
