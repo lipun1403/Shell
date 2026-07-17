@@ -12,7 +12,7 @@ const rl = createInterface({
 
 const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs"];
 let tabTracker = { line: "", count: 0 };
-
+let jobIdCounter = 1;
 const registeredCompletions = new Map();
 
 function completer(line) {
