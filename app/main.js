@@ -13,6 +13,7 @@ const rl = createInterface({
 const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs"];
 let tabTracker = { line: "", count: 0 };
 let jobIdCounter = 1;
+const backgroundJobs = [];
 const registeredCompletions = new Map();
 
 function completer(line) {
@@ -446,7 +447,15 @@ rl.on("line", (command) => {
     }
   }
   else if(cmd == "jobs") {
-
+    backgroundJobs.forEach((job, index) => {
+      // The most recent job gets a '+', others get a '-'
+      const marker = index === backgroundJobs.length - 1 ? "+" : "-";
+      
+      // Pad "Running" so the status field is exactly 24 characters long
+      const status = job.status.padEnd(24, " ");
+      
+      writeOut(`[${job.id}]${marker}  ${status}${job.command}`);
+    });
   }
   else {
     let executablePath = findExecutable(cmd);
@@ -462,6 +471,14 @@ rl.on("line", (command) => {
         // Use spawn (async) instead of spawnSync
         const child = spawn(executablePath, args, { argv0: cmd, stdio: bgStdio });
         console.log(`[${jobIdCounter}] ${child.pid}`);
+
+        backgroundJobs.push({
+          id: jobIdCounter,
+          pid: child.pid,
+          command: command.trim(),
+          status: "Running"
+        });
+        
         jobIdCounter++;
       } else {
         let stdioOpt = ["inherit", "inherit", "inherit"];
