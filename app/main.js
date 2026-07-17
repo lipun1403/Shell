@@ -1,7 +1,7 @@
 import { createInterface } from "readline";
 import { delimiter, resolve, join } from "path";
 import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync } from "fs";
-import { spawnSync } from "child_process";
+import { spawnSync, spawn } from "child_process";
 
 const rl = createInterface({
   input: process.stdin,
