@@ -377,14 +377,6 @@ rl.on("line", (command) => {
       }
     }
   } 
-  else if (cmd === "cat") {
-    let stdioOpt = ["inherit", "inherit", "inherit"];
-    
-    if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
-    if (targetErrFile) stdioOpt[2] = openSync(targetErrFile, errMode); 
-
-    spawnSync("cat", args, { stdio: stdioOpt });
-  } 
   else if (cmd === "pwd") {
     writeOut(process.cwd());
   } 
