@@ -299,6 +299,17 @@ rl.on("line", (command) => {
     return;
   }
 
+  let runInBackground = false;
+  if (parsedCommand[parsedCommand.length - 1] === "&") {
+    runInBackground = true;
+    parsedCommand.pop(); // Remove the '&' token
+  }
+  
+  if (parsedCommand.length === 0) {
+    rl.prompt();
+    return;
+  }
+
   let targetOutFile = null;
   let outMode = "w"; 
   let targetErrFile = null;
@@ -443,18 +454,30 @@ rl.on("line", (command) => {
     }
   }
   else if(cmd == "jobs") {
-    
+
   }
   else {
     let executablePath = findExecutable(cmd);
 
     if (executablePath) {
-      let stdioOpt = ["inherit", "inherit", "inherit"];
-      
-      if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
-      if (targetErrFile) stdioOpt[2] = openSync(targetErrFile, errMode); 
-
-      spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
+      if (runInBackground) {
+        let bgStdio = [
+          "ignore", // Ignore stdin for background tasks
+          targetOutFile ? openSync(targetOutFile, outMode) : "inherit", 
+          targetErrFile ? openSync(targetErrFile, errMode) : "inherit"
+        ];
+        
+        // Use spawn (async) instead of spawnSync
+        const child = spawn(executablePath, args, { argv0: cmd, stdio: bgStdio });
+        console.log(`[${jobIdCounter}] ${child.pid}`);
+        jobIdCounter++;
+      } else {
+        let stdioOpt = ["inherit", "inherit", "inherit"];
+        if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
+        if (targetErrFile) stdioOpt[2] = openSync(targetErrFile, errMode); 
+        
+        spawnSync(executablePath, args, { argv0: cmd, stdio: stdioOpt });
+      }
     } else {
       const errorMsg = `${cmd}: command not found`;
       if (targetErrFile) {
