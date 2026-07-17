@@ -448,8 +448,13 @@ rl.on("line", (command) => {
   }
   else if(cmd == "jobs") {
     backgroundJobs.forEach((job, index) => {
-      // The most recent job gets a '+', others get a '-'
-      const marker = index === backgroundJobs.length - 1 ? "+" : "-";
+      // Determine the correct marker based on the job's position in the array
+      let marker = " ";
+      if (index === backgroundJobs.length - 1) {
+        marker = "+"; // Most recent
+      } else if (index === backgroundJobs.length - 2) {
+        marker = "-"; // Second most recent
+      }
       
       // Pad "Running" so the status field is exactly 24 characters long
       const status = job.status.padEnd(24, " ");
@@ -478,7 +483,7 @@ rl.on("line", (command) => {
           command: command.trim(),
           status: "Running"
         });
-        
+
         jobIdCounter++;
       } else {
         let stdioOpt = ["inherit", "inherit", "inherit"];
