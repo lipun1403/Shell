@@ -446,26 +446,34 @@ rl.on("line", (command) => {
       }
     }
   }
-  else if(cmd == "jobs") {
+  else if (cmd === "jobs") {
+    // 1. Print all jobs
     backgroundJobs.forEach((job, index) => {
-      // Determine the correct marker based on the job's position in the array
       let marker = " ";
       if (index === backgroundJobs.length - 1) {
-        marker = "+"; // Most recent
+        marker = "+";
       } else if (index === backgroundJobs.length - 2) {
-        marker = "-"; // Second most recent
+        marker = "-";
       }
       
-      // Pad "Running" so the status field is exactly 24 characters long
       const status = job.status.padEnd(24, " ");
+      let displayCommand = job.command;
       
-      writeOut(`[${job.id}]${marker}  ${status}${job.command}`);
-      for (let i = backgroundJobs.length - 1; i >= 0; i--) {
-        if (backgroundJobs[i].status === "Done") {
-          backgroundJobs.splice(i, 1);
-        }
+      // If the job is Done, strip the trailing ampersand and any spaces before it
+      if (job.status === "Done") {
+        displayCommand = displayCommand.replace(/\s*&$/, "");
       }
+      
+      writeOut(`[${job.id}]${marker}  ${status}${displayCommand}`);
     });
+
+    // 2. Reap (remove) jobs that are marked as "Done"
+    // (Notice this is safely OUTSIDE the forEach loop now)
+    for (let i = backgroundJobs.length - 1; i >= 0; i--) {
+      if (backgroundJobs[i].status === "Done") {
+        backgroundJobs.splice(i, 1);
+      }
+    }
   }
   else {
     let executablePath = findExecutable(cmd);
