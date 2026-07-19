@@ -490,7 +490,10 @@ rl.on("line", (command) => {
         });
 
         child.on("exit", () => {
-          jobEntry.status = "Done";
+          const job = backgroundJobs.find(j => j.pid === child.pid);
+          if (job) {
+            job.status = "Done";
+          }
         });
 
         jobIdCounter++;
