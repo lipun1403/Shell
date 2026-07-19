@@ -169,6 +169,30 @@ function completer(line) {
   }
 }
 
+function checkAndReapJobs() {
+  for (let i = 0; i < backgroundJobs.length; i++) {
+    if (backgroundJobs[i].status === "Done") {
+      const job = backgroundJobs[i];
+      
+      let marker = " ";
+      if (i === backgroundJobs.length - 1) {
+        marker = "+";
+      } else if (i === backgroundJobs.length - 2) {
+        marker = "-";
+      }
+      
+      const status = job.status.padEnd(24, " ");
+      const displayCommand = job.command.replace(/\s*&$/, "");
+      
+      console.log(`[${job.id}]${marker}  ${status}${displayCommand}`);
+      
+      // Remove it from the array and adjust the index
+      backgroundJobs.splice(i, 1);
+      i--;
+    }
+  }
+}
+
 function getLongestCommonPrefix(words) {
   if (words.length === 0) return "";
   let prefix = words[0];
@@ -296,6 +320,7 @@ rl.on("line", (command) => {
   const parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
+    checkAndReapJobs();
     rl.prompt();
     return;
   }
