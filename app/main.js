@@ -460,6 +460,11 @@ rl.on("line", (command) => {
       const status = job.status.padEnd(24, " ");
       
       writeOut(`[${job.id}]${marker}  ${status}${job.command}`);
+      for (let i = backgroundJobs.length - 1; i >= 0; i--) {
+        if (backgroundJobs[i].status === "Done") {
+          backgroundJobs.splice(i, 1);
+        }
+      }
     });
   }
   else {
@@ -482,6 +487,10 @@ rl.on("line", (command) => {
           pid: child.pid,
           command: command.trim(),
           status: "Running"
+        });
+
+        child.on("exit", () => {
+          jobEntry.status = "Done";
         });
 
         jobIdCounter++;
