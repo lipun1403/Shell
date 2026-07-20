@@ -329,7 +329,7 @@ rl.on("line", (command) => {
   if (trimmedCommand) {
     commandHistory.push(trimmedCommand);
   }
-  
+
   const parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
@@ -610,6 +610,10 @@ rl.on("line", (command) => {
     for (let i = backgroundJobs.length - 1; i >= 0; i--) {
       if (backgroundJobs[i].status === "Done") backgroundJobs.splice(i, 1);
     }
+  }
+  else if (cmd === "history") {
+    const lines = commandHistory.map((h, idx) => `${String(idx + 1).padStart(5, " ")}  ${h}`);
+    writeOut(lines.join("\n"));
   }
   else {
     let executablePath = findExecutable(cmd);
