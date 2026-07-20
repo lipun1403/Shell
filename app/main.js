@@ -193,6 +193,14 @@ function checkAndReapJobs() {
   }
 }
 
+// THIS IS THE CRITICAL MISSING PIECE
+function promptAfterReaping() {
+  setTimeout(() => {
+    checkAndReapJobs();
+    rl.prompt();
+  }, 15);
+}
+
 function getLongestCommonPrefix(words) {
   if (words.length === 0) return "";
   let prefix = words[0];
@@ -320,8 +328,7 @@ rl.on("line", (command) => {
   const parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
-    checkAndReapJobs();
-    rl.prompt();
+    promptAfterReaping(); // Replaced
     return;
   }
 
@@ -332,7 +339,7 @@ rl.on("line", (command) => {
   }
   
   if (parsedCommand.length === 0) {
-    rl.prompt();
+    promptAfterReaping(); // Replaced
     return;
   }
 
@@ -422,7 +429,7 @@ rl.on("line", (command) => {
   } 
   else if (cmd === "complete") {
     if (args.length === 0) {
-      rl.prompt();
+      promptAfterReaping(); // Replaced
       return;
     }
 
@@ -493,7 +500,6 @@ rl.on("line", (command) => {
     });
 
     // 2. Reap (remove) jobs that are marked as "Done"
-    // (Notice this is safely OUTSIDE the forEach loop now)
     for (let i = backgroundJobs.length - 1; i >= 0; i--) {
       if (backgroundJobs[i].status === "Done") {
         backgroundJobs.splice(i, 1);
@@ -547,5 +553,5 @@ rl.on("line", (command) => {
     }
   }
   
-  rl.prompt();
+  promptAfterReaping(); // Replaced
 });
