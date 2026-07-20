@@ -595,6 +595,20 @@ rl.on("line", (command) => {
     }
   }
   else if (cmd === "jobs") {
+    // 1. Force a synchronous check with the OS to beat the speed mismatch
+    backgroundJobs.forEach((job) => {
+      if (job.status === "Running") {
+        try {
+          // Sending signal 0 checks if the process exists. 
+          // If it doesn't, it throws an error immediately.
+          process.kill(job.pid, 0); 
+        } catch (error) {
+          job.status = "Done";
+        }
+      }
+    });
+
+    // 2. Format and print jobs
     backgroundJobs.forEach((job, index) => {
       let marker = " ";
       if (index === backgroundJobs.length - 1) marker = "+";
@@ -602,11 +616,14 @@ rl.on("line", (command) => {
       
       const status = job.status.padEnd(24, " ");
       let displayCommand = job.command;
+      
+      // The tester expects the '&' removed for 'Done' jobs
       if (job.status === "Done") displayCommand = displayCommand.replace(/\s*&$/, "");
       
       writeOut(`[${job.id}]${marker}  ${status}${displayCommand}`);
     });
 
+    // 3. Remove "Done" jobs so they aren't printed a second time
     for (let i = backgroundJobs.length - 1; i >= 0; i--) {
       if (backgroundJobs[i].status === "Done") backgroundJobs.splice(i, 1);
     }
