@@ -12,7 +12,6 @@ const rl = createInterface({
 
 const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs"];
 let tabTracker = { line: "", count: 0 };
-let jobIdCounter = 1;
 const backgroundJobs = [];
 const registeredCompletions = new Map();
 
@@ -517,12 +516,18 @@ rl.on("line", (command) => {
           targetErrFile ? openSync(targetErrFile, errMode) : "inherit"
         ];
         
+        // Calculate the lowest available job ID
+        let newJobId = 1;
+        while (backgroundJobs.some(j => j.id === newJobId)) {
+          newJobId++;
+        }
+
         // Use spawn (async) instead of spawnSync
         const child = spawn(executablePath, args, { argv0: cmd, stdio: bgStdio });
-        console.log(`[${jobIdCounter}] ${child.pid}`);
+        console.log(`[${newJobId}] ${child.pid}`);
 
         backgroundJobs.push({
-          id: jobIdCounter,
+          id: newJobId,
           pid: child.pid,
           command: command.trim(),
           status: "Running"
@@ -534,8 +539,6 @@ rl.on("line", (command) => {
             job.status = "Done";
           }
         });
-
-        jobIdCounter++;
       } else {
         let stdioOpt = ["inherit", "inherit", "inherit"];
         if (targetOutFile) stdioOpt[1] = openSync(targetOutFile, outMode); 
