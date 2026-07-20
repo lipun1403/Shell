@@ -378,6 +378,94 @@ rl.on("line", (command) => {
   if (targetOutFile) writeFileSync(targetOutFile, "", { flag: outMode });
   if (targetErrFile) writeFileSync(targetErrFile, "", { flag: errMode });
 
+  const pipeIndex = parsedCommand.indexOf("|");
+  if (pipeIndex !== -1) {
+    const leftCmdArgs = parsedCommand.slice(0, pipeIndex);
+    const rightCmdArgs = parsedCommand.slice(pipeIndex + 1);
+
+    const leftCmd = leftCmdArgs[0];
+    const leftArgs = leftCmdArgs.slice(1);
+
+    const rightCmd = rightCmdArgs[0];
+    const rightArgs = rightCmdArgs.slice(1);
+
+    let leftOutput = "";
+    let leftProcess = null;
+
+    // 1. Prepare Left Side
+    if (isShellBuiltin(leftCmd)) {
+      // If it's a builtin, we generate the string output in memory
+      if (leftCmd === "echo") leftOutput = leftArgs.join(" ") + "\n";
+      else if (leftCmd === "pwd") leftOutput = process.cwd() + "\n";
+      else if (leftCmd === "type") {
+        const target = leftArgs[0];
+        if (isShellBuiltin(target)) leftOutput = `${target} is a shell builtin\n`;
+        else {
+          const execPath = findExecutable(target);
+          if (execPath) leftOutput = `${target} is ${execPath}\n`;
+          else leftOutput = `${target}: not found\n`;
+        }
+      }
+    } else {
+      // If it's an external executable, spawn it with a pipable stdout
+      const execPath = findExecutable(leftCmd);
+      if (execPath) {
+        leftProcess = spawn(execPath, leftArgs, { argv0: leftCmd, stdio: ['inherit', 'pipe', 'inherit'] });
+      } else {
+        console.log(`${leftCmd}: command not found`);
+        promptAfterReaping();
+        return;
+      }
+    }
+
+    // 2. Prepare Right Side
+    const rightExecPath = findExecutable(rightCmd);
+    if (!rightExecPath) {
+      console.log(`${rightCmd}: command not found`);
+      promptAfterReaping();
+      return;
+    }
+
+    // Ensure the right side honors any > or >> redirections the user typed!
+    let rightStdio = ['pipe', 'inherit', 'inherit'];
+    if (targetOutFile) rightStdio[1] = openSync(targetOutFile, outMode);
+    if (targetErrFile) rightStdio[2] = openSync(targetErrFile, errMode);
+
+    const rightProcess = spawn(rightExecPath, rightArgs, { argv0: rightCmd, stdio: rightStdio });
+
+    // 3. Connect them!
+    if (leftProcess) {
+      leftProcess.stdout.pipe(rightProcess.stdin);
+    } else {
+      // If left was a builtin, write the memory string directly to the right side's stdin
+      rightProcess.stdin.write(leftOutput);
+      rightProcess.stdin.end();
+    }
+
+    // 4. Wait for it to finish
+    if (runInBackground) {
+      let newJobId = 1;
+      while (backgroundJobs.some(j => j.id === newJobId)) newJobId++;
+      console.log(`[${newJobId}] ${rightProcess.pid}`);
+      backgroundJobs.push({
+        id: newJobId,
+        pid: rightProcess.pid,
+        command: command.trim(),
+        status: "Running"
+      });
+      rightProcess.on("exit", () => {
+        const job = backgroundJobs.find(j => j.pid === rightProcess.pid);
+        if (job) job.status = "Done";
+      });
+      promptAfterReaping();
+    } else {
+      rightProcess.on("close", () => {
+        promptAfterReaping();
+      });
+    }
+    return; // Exit early so the rest of the script doesn't try to run it again
+  }
+
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
 
