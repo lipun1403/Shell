@@ -612,7 +612,17 @@ rl.on("line", (command) => {
     }
   }
   else if (cmd === "history") {
-    const lines = commandHistory.map((h, idx) => `${String(idx + 1).padStart(5, " ")}  ${h}`);
+    let limit = commandHistory.length;
+    if (args.length > 0 && !isNaN(parseInt(args[0], 10))) {
+      limit = parseInt(args[0], 10);
+    }
+    
+    const startIndex = Math.max(0, commandHistory.length - limit);
+    const historyToShow = commandHistory.slice(startIndex);
+    
+    const lines = historyToShow.map((h, idx) => 
+      `${String(startIndex + idx + 1).padStart(5, " ")}  ${h}`
+    );
     writeOut(lines.join("\n"));
   }
   else {
