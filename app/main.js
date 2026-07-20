@@ -327,7 +327,7 @@ rl.on("line", (command) => {
   const parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
-    promptAfterReaping(); // Replaced
+    promptAfterReaping();
     return;
   }
 
@@ -338,7 +338,7 @@ rl.on("line", (command) => {
   }
   
   if (parsedCommand.length === 0) {
-    promptAfterReaping(); // Replaced
+    promptAfterReaping();
     return;
   }
 
@@ -378,125 +378,121 @@ rl.on("line", (command) => {
   if (targetOutFile) writeFileSync(targetOutFile, "", { flag: outMode });
   if (targetErrFile) writeFileSync(targetErrFile, "", { flag: errMode });
 
-  // =======================================================================
-  // PIPE LOGIC (Supports Builtins on BOTH sides)
-  // =======================================================================
-  const pipeIndex = parsedCommand.indexOf("|");
-  if (pipeIndex !== -1) {
-    const leftCmdArgs = parsedCommand.slice(0, pipeIndex);
-    const rightCmdArgs = parsedCommand.slice(pipeIndex + 1);
-
-    const leftCmd = leftCmdArgs[0];
-    const leftArgs = leftCmdArgs.slice(1);
-
-    const rightCmd = rightCmdArgs[0];
-    const rightArgs = rightCmdArgs.slice(1);
-
-    let leftOutput = "";
-    let leftProcess = null;
-    let rightProcess = null;
-    let rightBuiltinOutput = "";
-
-    // 1. Prepare Left Side
-    if (isShellBuiltin(leftCmd)) {
-      if (leftCmd === "echo") leftOutput = leftArgs.join(" ") + "\n";
-      else if (leftCmd === "pwd") leftOutput = process.cwd() + "\n";
-      else if (leftCmd === "type") {
-        const target = leftArgs[0];
-        if (isShellBuiltin(target)) leftOutput = `${target} is a shell builtin\n`;
-        else {
-          const execPath = findExecutable(target);
-          if (execPath) leftOutput = `${target} is ${execPath}\n`;
-          else leftOutput = `${target}: not found\n`;
-        }
-      }
-    } else {
-      const execPath = findExecutable(leftCmd);
-      if (execPath) {
-        leftProcess = spawn(execPath, leftArgs, { argv0: leftCmd, stdio: ['inherit', 'pipe', 'inherit'] });
+  if (parsedCommand.includes("|")) {
+    // 1. Break the command into separate pipeline stages
+    const pipeline = [];
+    let currentStage = [];
+    for (const arg of parsedCommand) {
+      if (arg === "|") {
+        pipeline.push(currentStage);
+        currentStage = [];
       } else {
-        console.log(`${leftCmd}: command not found`);
-        promptAfterReaping();
-        return;
+        currentStage.push(arg);
+      }
+    }
+    pipeline.push(currentStage);
+
+    let prevProcess = null;
+    let prevBuiltinOutput = "";
+    let lastProcess = null;
+
+    // 2. Execute each stage and pipe them together
+    for (let i = 0; i < pipeline.length; i++) {
+      const stageArgs = pipeline[i];
+      if (stageArgs.length === 0) continue;
+
+      const cmd = stageArgs[0];
+      const args = stageArgs.slice(1);
+      const isLast = (i === pipeline.length - 1);
+      const isFirst = (i === 0);
+
+      if (isShellBuiltin(cmd)) {
+        let output = "";
+        if (cmd === "echo") output = args.join(" ") + "\n";
+        else if (cmd === "pwd") output = process.cwd() + "\n";
+        else if (cmd === "type") {
+          const target = args[0];
+          if (isShellBuiltin(target)) output = `${target} is a shell builtin\n`;
+          else {
+            const execPath = findExecutable(target);
+            if (execPath) output = `${target} is ${execPath}\n`;
+            else output = `${target}: not found\n`;
+          }
+        }
+        
+        if (isLast) {
+          if (targetOutFile) writeFileSync(targetOutFile, output, { flag: outMode });
+          else process.stdout.write(output);
+        } else {
+          prevBuiltinOutput = output;
+        }
+        
+        // Drain the previous process so it doesn't hang waiting to write to our builtin
+        if (prevProcess && prevProcess.stdout) {
+          prevProcess.stdout.resume(); 
+        }
+        
+        prevProcess = null; // A builtin doesn't have a stream for the next process
+      } else {
+        const execPath = findExecutable(cmd);
+        if (!execPath) {
+          console.log(`${cmd}: command not found`);
+          if (prevProcess && prevProcess.stdout) prevProcess.stdout.resume();
+          promptAfterReaping();
+          return;
+        }
+
+        let stdIn = isFirst ? 'inherit' : 'pipe';
+        let stdOut = isLast ? (targetOutFile ? openSync(targetOutFile, outMode) : 'inherit') : 'pipe';
+        let stdErr = isLast ? (targetErrFile ? openSync(targetErrFile, errMode) : 'inherit') : 'inherit';
+
+        if (isFirst && runInBackground) stdIn = 'ignore';
+
+        const currProcess = spawn(execPath, args, { argv0: cmd, stdio: [stdIn, stdOut, stdErr] });
+
+        // Connect stdin to the previous output
+        if (!isFirst) {
+          if (prevProcess) {
+            prevProcess.stdout.pipe(currProcess.stdin);
+          } else {
+            currProcess.stdin.write(prevBuiltinOutput);
+            currProcess.stdin.end();
+          }
+        }
+
+        prevProcess = currProcess;
+        if (isLast) {
+          lastProcess = currProcess;
+        }
       }
     }
 
-    // 2. Prepare Right Side
-    if (isShellBuiltin(rightCmd)) {
-      if (rightCmd === "echo") rightBuiltinOutput = rightArgs.join(" ") + "\n";
-      else if (rightCmd === "pwd") rightBuiltinOutput = process.cwd() + "\n";
-      else if (rightCmd === "type") {
-        const target = rightArgs[0];
-        if (isShellBuiltin(target)) rightBuiltinOutput = `${target} is a shell builtin\n`;
-        else {
-          const execPath = findExecutable(target);
-          if (execPath) rightBuiltinOutput = `${target} is ${execPath}\n`;
-          else rightBuiltinOutput = `${target}: not found\n`;
-        }
-      }
-    } else {
-      const rightExecPath = findExecutable(rightCmd);
-      if (!rightExecPath) {
-        console.log(`${rightCmd}: command not found`);
-        promptAfterReaping();
-        return;
-      }
-
-      let rightStdio = ['pipe', 'inherit', 'inherit'];
-      if (targetOutFile) rightStdio[1] = openSync(targetOutFile, outMode);
-      if (targetErrFile) rightStdio[2] = openSync(targetErrFile, errMode);
-
-      rightProcess = spawn(rightExecPath, rightArgs, { argv0: rightCmd, stdio: rightStdio });
-    }
-
-    // 3. Connect them!
-    if (rightProcess) {
-      if (leftProcess) {
-        leftProcess.stdout.pipe(rightProcess.stdin);
-      } else {
-        rightProcess.stdin.write(leftOutput);
-        rightProcess.stdin.end();
-      }
-
-      // 4. Wait for Right Process to finish
+    // 3. Wait for the final pipeline stage to finish
+    if (lastProcess) {
       if (runInBackground) {
         let newJobId = 1;
         while (backgroundJobs.some(j => j.id === newJobId)) newJobId++;
-        console.log(`[${newJobId}] ${rightProcess.pid}`);
+        console.log(`[${newJobId}] ${lastProcess.pid}`);
         backgroundJobs.push({
           id: newJobId,
-          pid: rightProcess.pid,
+          pid: lastProcess.pid,
           command: command.trim(),
           status: "Running"
         });
-        rightProcess.on("exit", () => {
-          const job = backgroundJobs.find(j => j.pid === rightProcess.pid);
+        lastProcess.on("exit", () => {
+          const job = backgroundJobs.find(j => j.pid === lastProcess.pid);
           if (job) job.status = "Done";
         });
         promptAfterReaping();
       } else {
-        rightProcess.on("close", () => promptAfterReaping());
+        lastProcess.on("close", () => promptAfterReaping());
       }
     } else {
-      // Right side was a builtin
-      if (rightBuiltinOutput) {
-        if (targetOutFile) writeFileSync(targetOutFile, rightBuiltinOutput, { flag: outMode });
-        else process.stdout.write(rightBuiltinOutput);
-      }
-      
-      if (leftProcess) {
-        leftProcess.stdout.resume(); // Drain it so it doesn't freeze
-        leftProcess.on("close", () => promptAfterReaping());
-      } else {
-        promptAfterReaping();
-      }
+      promptAfterReaping();
     }
     
-    return; // Exit early to avoid the normal execution flow
+    return; // Exit early to skip the single-command logic below
   }
-  // =======================================================================
-  // END PIPE LOGIC
-  // =======================================================================
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
@@ -552,7 +548,6 @@ rl.on("line", (command) => {
       return;
     }
 
-    // 1. Registering completions
     if (args[0] === "-C" && args.length >= 3) {
       const scriptPath = args[1].replace(/^['"]|['"]$/g, '');
       
@@ -561,7 +556,6 @@ rl.on("line", (command) => {
         registeredCompletions.set(targetCommand, scriptPath);
       }
     } 
-    // 2. Displaying all registered completions
     else if (args[0] === "-p" && args.length === 1) {
       if (registeredCompletions.size > 0) {
         const sortedCommands = Array.from(registeredCompletions.keys()).sort();
@@ -572,7 +566,6 @@ rl.on("line", (command) => {
         }
       }
     }
-    // 3. Displaying a specific completion
     else if (args[0] === "-p" && args.length === 2) {
       const targetCommand = args[1].replace(/^['"]|['"]$/g, '');
       
@@ -583,7 +576,6 @@ rl.on("line", (command) => {
         writeOut(`complete: ${targetCommand}: no completion specification`);
       }
     }
-    // 4. Unregistering completions (-r)
     else if (args[0] === "-r" && args.length >= 2) {
       for (let i = 1; i < args.length; i++) {
         const targetCommand = args[i].replace(/^['"]|['"]$/g, '');
@@ -591,38 +583,26 @@ rl.on("line", (command) => {
         if (registeredCompletions.has(targetCommand)) {
           registeredCompletions.delete(targetCommand);
         } else {
-          // Emulate standard bash error if it doesn't exist
           writeOut(`complete: ${targetCommand}: no completion specification`);
         }
       }
     }
   }
   else if (cmd === "jobs") {
-    // 1. Print all jobs
     backgroundJobs.forEach((job, index) => {
       let marker = " ";
-      if (index === backgroundJobs.length - 1) {
-        marker = "+";
-      } else if (index === backgroundJobs.length - 2) {
-        marker = "-";
-      }
+      if (index === backgroundJobs.length - 1) marker = "+";
+      else if (index === backgroundJobs.length - 2) marker = "-";
       
       const status = job.status.padEnd(24, " ");
       let displayCommand = job.command;
-      
-      // If the job is Done, strip the trailing ampersand and any spaces before it
-      if (job.status === "Done") {
-        displayCommand = displayCommand.replace(/\s*&$/, "");
-      }
+      if (job.status === "Done") displayCommand = displayCommand.replace(/\s*&$/, "");
       
       writeOut(`[${job.id}]${marker}  ${status}${displayCommand}`);
     });
 
-    // 2. Reap (remove) jobs that are marked as "Done"
     for (let i = backgroundJobs.length - 1; i >= 0; i--) {
-      if (backgroundJobs[i].status === "Done") {
-        backgroundJobs.splice(i, 1);
-      }
+      if (backgroundJobs[i].status === "Done") backgroundJobs.splice(i, 1);
     }
   }
   else {
@@ -631,18 +611,14 @@ rl.on("line", (command) => {
     if (executablePath) {
       if (runInBackground) {
         let bgStdio = [
-          "ignore", // Ignore stdin for background tasks
+          "ignore", 
           targetOutFile ? openSync(targetOutFile, outMode) : "inherit", 
           targetErrFile ? openSync(targetErrFile, errMode) : "inherit"
         ];
         
-        // Calculate the lowest available job ID
         let newJobId = 1;
-        while (backgroundJobs.some(j => j.id === newJobId)) {
-          newJobId++;
-        }
+        while (backgroundJobs.some(j => j.id === newJobId)) newJobId++;
 
-        // Use spawn (async) instead of spawnSync
         const child = spawn(executablePath, args, { argv0: cmd, stdio: bgStdio });
         console.log(`[${newJobId}] ${child.pid}`);
 
@@ -655,9 +631,7 @@ rl.on("line", (command) => {
 
         child.on("exit", () => {
           const job = backgroundJobs.find(j => j.pid === child.pid);
-          if (job) {
-            job.status = "Done";
-          }
+          if (job) job.status = "Done";
         });
       } else {
         let stdioOpt = ["inherit", "inherit", "inherit"];
@@ -668,13 +642,10 @@ rl.on("line", (command) => {
       }
     } else {
       const errorMsg = `${cmd}: command not found`;
-      if (targetErrFile) {
-        writeFileSync(targetErrFile, errorMsg + "\n", { flag: errMode });
-      } else {
-        console.log(errorMsg);
-      }
+      if (targetErrFile) writeFileSync(targetErrFile, errorMsg + "\n", { flag: errMode });
+      else console.log(errorMsg);
     }
   }
   
-  promptAfterReaping(); // Replaced
+  promptAfterReaping();
 });
