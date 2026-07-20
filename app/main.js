@@ -378,6 +378,9 @@ rl.on("line", (command) => {
   if (targetOutFile) writeFileSync(targetOutFile, "", { flag: outMode });
   if (targetErrFile) writeFileSync(targetErrFile, "", { flag: errMode });
 
+  // =======================================================================
+  // PIPE LOGIC (Supports Builtins on BOTH sides)
+  // =======================================================================
   const pipeIndex = parsedCommand.indexOf("|");
   if (pipeIndex !== -1) {
     const leftCmdArgs = parsedCommand.slice(0, pipeIndex);
@@ -391,10 +394,11 @@ rl.on("line", (command) => {
 
     let leftOutput = "";
     let leftProcess = null;
+    let rightProcess = null;
+    let rightBuiltinOutput = "";
 
     // 1. Prepare Left Side
     if (isShellBuiltin(leftCmd)) {
-      // If it's a builtin, we generate the string output in memory
       if (leftCmd === "echo") leftOutput = leftArgs.join(" ") + "\n";
       else if (leftCmd === "pwd") leftOutput = process.cwd() + "\n";
       else if (leftCmd === "type") {
@@ -407,7 +411,6 @@ rl.on("line", (command) => {
         }
       }
     } else {
-      // If it's an external executable, spawn it with a pipable stdout
       const execPath = findExecutable(leftCmd);
       if (execPath) {
         leftProcess = spawn(execPath, leftArgs, { argv0: leftCmd, stdio: ['inherit', 'pipe', 'inherit'] });
@@ -419,52 +422,81 @@ rl.on("line", (command) => {
     }
 
     // 2. Prepare Right Side
-    const rightExecPath = findExecutable(rightCmd);
-    if (!rightExecPath) {
-      console.log(`${rightCmd}: command not found`);
-      promptAfterReaping();
-      return;
+    if (isShellBuiltin(rightCmd)) {
+      if (rightCmd === "echo") rightBuiltinOutput = rightArgs.join(" ") + "\n";
+      else if (rightCmd === "pwd") rightBuiltinOutput = process.cwd() + "\n";
+      else if (rightCmd === "type") {
+        const target = rightArgs[0];
+        if (isShellBuiltin(target)) rightBuiltinOutput = `${target} is a shell builtin\n`;
+        else {
+          const execPath = findExecutable(target);
+          if (execPath) rightBuiltinOutput = `${target} is ${execPath}\n`;
+          else rightBuiltinOutput = `${target}: not found\n`;
+        }
+      }
+    } else {
+      const rightExecPath = findExecutable(rightCmd);
+      if (!rightExecPath) {
+        console.log(`${rightCmd}: command not found`);
+        promptAfterReaping();
+        return;
+      }
+
+      let rightStdio = ['pipe', 'inherit', 'inherit'];
+      if (targetOutFile) rightStdio[1] = openSync(targetOutFile, outMode);
+      if (targetErrFile) rightStdio[2] = openSync(targetErrFile, errMode);
+
+      rightProcess = spawn(rightExecPath, rightArgs, { argv0: rightCmd, stdio: rightStdio });
     }
-
-    // Ensure the right side honors any > or >> redirections the user typed!
-    let rightStdio = ['pipe', 'inherit', 'inherit'];
-    if (targetOutFile) rightStdio[1] = openSync(targetOutFile, outMode);
-    if (targetErrFile) rightStdio[2] = openSync(targetErrFile, errMode);
-
-    const rightProcess = spawn(rightExecPath, rightArgs, { argv0: rightCmd, stdio: rightStdio });
 
     // 3. Connect them!
-    if (leftProcess) {
-      leftProcess.stdout.pipe(rightProcess.stdin);
-    } else {
-      // If left was a builtin, write the memory string directly to the right side's stdin
-      rightProcess.stdin.write(leftOutput);
-      rightProcess.stdin.end();
-    }
+    if (rightProcess) {
+      if (leftProcess) {
+        leftProcess.stdout.pipe(rightProcess.stdin);
+      } else {
+        rightProcess.stdin.write(leftOutput);
+        rightProcess.stdin.end();
+      }
 
-    // 4. Wait for it to finish
-    if (runInBackground) {
-      let newJobId = 1;
-      while (backgroundJobs.some(j => j.id === newJobId)) newJobId++;
-      console.log(`[${newJobId}] ${rightProcess.pid}`);
-      backgroundJobs.push({
-        id: newJobId,
-        pid: rightProcess.pid,
-        command: command.trim(),
-        status: "Running"
-      });
-      rightProcess.on("exit", () => {
-        const job = backgroundJobs.find(j => j.pid === rightProcess.pid);
-        if (job) job.status = "Done";
-      });
-      promptAfterReaping();
-    } else {
-      rightProcess.on("close", () => {
+      // 4. Wait for Right Process to finish
+      if (runInBackground) {
+        let newJobId = 1;
+        while (backgroundJobs.some(j => j.id === newJobId)) newJobId++;
+        console.log(`[${newJobId}] ${rightProcess.pid}`);
+        backgroundJobs.push({
+          id: newJobId,
+          pid: rightProcess.pid,
+          command: command.trim(),
+          status: "Running"
+        });
+        rightProcess.on("exit", () => {
+          const job = backgroundJobs.find(j => j.pid === rightProcess.pid);
+          if (job) job.status = "Done";
+        });
         promptAfterReaping();
-      });
+      } else {
+        rightProcess.on("close", () => promptAfterReaping());
+      }
+    } else {
+      // Right side was a builtin
+      if (rightBuiltinOutput) {
+        if (targetOutFile) writeFileSync(targetOutFile, rightBuiltinOutput, { flag: outMode });
+        else process.stdout.write(rightBuiltinOutput);
+      }
+      
+      if (leftProcess) {
+        leftProcess.stdout.resume(); // Drain it so it doesn't freeze
+        leftProcess.on("close", () => promptAfterReaping());
+      } else {
+        promptAfterReaping();
+      }
     }
-    return; // Exit early so the rest of the script doesn't try to run it again
+    
+    return; // Exit early to avoid the normal execution flow
   }
+  // =======================================================================
+  // END PIPE LOGIC
+  // =======================================================================
 
   const cmd = parsedCommand[0];
   const args = parsedCommand.slice(1);
@@ -516,7 +548,7 @@ rl.on("line", (command) => {
   } 
   else if (cmd === "complete") {
     if (args.length === 0) {
-      promptAfterReaping(); // Replaced
+      promptAfterReaping(); 
       return;
     }
 
