@@ -10,8 +10,9 @@ const rl = createInterface({
   completer: completer,
 });
 
-const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs"];
+const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs", "history"];
 let tabTracker = { line: "", count: 0 };
+const commandHistory = [];
 const backgroundJobs = [];
 const registeredCompletions = new Map();
 
@@ -324,6 +325,11 @@ function parseArguments(input) {
 rl.prompt();
 
 rl.on("line", (command) => {
+  const trimmedCommand = command.trim();
+  if (trimmedCommand) {
+    commandHistory.push(trimmedCommand);
+  }
+  
   const parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
