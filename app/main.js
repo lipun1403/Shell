@@ -641,8 +641,16 @@ rl.on("line", (command) => {
         // Append the loaded commands to the in-memory history list
         commandHistory.push(...lines);
       }
+    } else if (args[0] === "-w") {
+      // 2. Handle writing to a file
+      const filePath = args[1];
+      if (filePath) {
+        // Join the array with newlines and add a trailing newline
+        const content = commandHistory.join("\n") + "\n";
+        writeFileSync(filePath, content, "utf8");
+      }
     } else {
-      // 2. Standard history printing logic
+      // 3. Standard history printing logic
       let limit = commandHistory.length;
       if (args.length > 0 && !isNaN(parseInt(args[0], 10))) {
         limit = parseInt(args[0], 10);
