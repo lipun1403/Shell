@@ -15,6 +15,7 @@ let tabTracker = { line: "", count: 0 };
 const commandHistory = [];
 const backgroundJobs = [];
 const registeredCompletions = new Map();
+let lastAppendIndex = 0;
 
 function completer(line) {
   const words = line.split(" ");
@@ -640,6 +641,7 @@ rl.on("line", (command) => {
         
         // Append the loaded commands to the in-memory history list
         commandHistory.push(...lines);
+        lastAppendIndex = commandHistory.length;
       }
     } else if (args[0] === "-w") {
       // 2. Handle writing to a file
@@ -648,13 +650,21 @@ rl.on("line", (command) => {
         // Join the array with newlines and add a trailing newline
         const content = commandHistory.join("\n") + "\n";
         writeFileSync(filePath, content, "utf8");
+        lastAppendIndex = commandHistory.length;
       }
     } else if (args[0] === "-a") {
       // 3. Handle appending to a file
       const filePath = args[1];
       if (filePath) {
-        const content = commandHistory.join("\n") + "\n";
-        appendFileSync(filePath, content, "utf8");
+        const newCommands = commandHistory.slice(lastAppendIndex);
+        
+        if (newCommands.length > 0) {
+          const content = newCommands.join("\n") + "\n";
+          appendFileSync(filePath, content, "utf8");
+          
+          // Update the tracking index to the end of the array
+          lastAppendIndex = commandHistory.length;
+        }
       }
     } else {
       // 4. Standard history printing logic
