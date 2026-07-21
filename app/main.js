@@ -1,6 +1,6 @@
 import { createInterface } from "readline";
 import { delimiter, resolve, join } from "path";
-import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync, readFileSync } from "fs";
+import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync, readFileSync, appendFileSync } from "fs";
 import { spawnSync, spawn } from "child_process";
 
 const rl = createInterface({
@@ -649,8 +649,15 @@ rl.on("line", (command) => {
         const content = commandHistory.join("\n") + "\n";
         writeFileSync(filePath, content, "utf8");
       }
+    } else if (args[0] === "-a") {
+      // 3. Handle appending to a file
+      const filePath = args[1];
+      if (filePath) {
+        const content = commandHistory.join("\n") + "\n";
+        appendFileSync(filePath, content, "utf8");
+      }
     } else {
-      // 3. Standard history printing logic
+      // 4. Standard history printing logic
       let limit = commandHistory.length;
       if (args.length > 0 && !isNaN(parseInt(args[0], 10))) {
         limit = parseInt(args[0], 10);
