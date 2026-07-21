@@ -1,6 +1,6 @@
 import { createInterface } from "readline";
 import { delimiter, resolve, join } from "path";
-import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync } from "fs";
+import { accessSync, constants, statSync, writeFileSync, openSync, existsSync, readdirSync, readFileSync } from "fs";
 import { spawnSync, spawn } from "child_process";
 
 const rl = createInterface({
@@ -629,18 +629,36 @@ rl.on("line", (command) => {
     }
   }
   else if (cmd === "history") {
-    let limit = commandHistory.length;
-    if (args.length > 0 && !isNaN(parseInt(args[0], 10))) {
-      limit = parseInt(args[0], 10);
+    if (args[0] === "-r") {
+      // 1. Handle reading from a file
+      const filePath = args[1];
+      if (filePath && existsSync(filePath)) {
+        const fileContent = readFileSync(filePath, "utf8");
+        
+        // Split by newline and filter out the trailing empty line
+        const lines = fileContent.split("\n").filter(line => line !== "");
+        
+        // Append the loaded commands to the in-memory history list
+        commandHistory.push(...lines);
+      }
+    } else {
+      // 2. Standard history printing logic
+      let limit = commandHistory.length;
+      if (args.length > 0 && !isNaN(parseInt(args[0], 10))) {
+        limit = parseInt(args[0], 10);
+      }
+      
+      const startIndex = Math.max(0, commandHistory.length - limit);
+      const historyToShow = commandHistory.slice(startIndex);
+      
+      const lines = historyToShow.map((h, idx) => 
+        `${String(startIndex + idx + 1).padStart(5, " ")}  ${h}`
+      );
+      
+      if (lines.length > 0) {
+        writeOut(lines.join("\n"));
+      }
     }
-    
-    const startIndex = Math.max(0, commandHistory.length - limit);
-    const historyToShow = commandHistory.slice(startIndex);
-    
-    const lines = historyToShow.map((h, idx) => 
-      `${String(startIndex + idx + 1).padStart(5, " ")}  ${h}`
-    );
-    writeOut(lines.join("\n"));
   }
   else {
     let executablePath = findExecutable(cmd);
