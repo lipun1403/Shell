@@ -743,3 +743,18 @@ rl.on("line", (command) => {
   
   promptAfterReaping();
 });
+
+rl.on("close", () => {
+  const histFile = process.env.HISTFILE;
+  if (histFile) {
+    // Only get the commands that haven't been appended yet
+    const newCommands = commandHistory.slice(lastAppendIndex);
+    
+    if (newCommands.length > 0) {
+      const content = newCommands.join("\n") + "\n";
+      // Append the new commands so we don't overwrite history from other sessions
+      appendFileSync(histFile, content, "utf8");
+    }
+  }
+  process.exit(0);
+});
