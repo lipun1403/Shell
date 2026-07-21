@@ -323,6 +323,20 @@ function parseArguments(input) {
   return args;
 }
 
+const histFile = process.env.HISTFILE;
+if (histFile && existsSync(histFile)) {
+  try {
+    const fileContent = readFileSync(histFile, "utf8");
+    const lines = fileContent.split("\n").filter(line => line !== "");
+    commandHistory.push(...lines);
+    
+    // Sync our tracking index so we don't duplicate these if history -a is called
+    lastAppendIndex = commandHistory.length;
+  } catch (err) {
+    // Silently ignore read errors on startup
+  }
+}
+
 rl.prompt();
 
 rl.on("line", (command) => {
