@@ -10,11 +10,13 @@ const rl = createInterface({
   completer: completer,
 });
 
-const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs", "history"];
-let tabTracker = { line: "", count: 0 };
+const builtins = ["echo", "type", "exit", "pwd", "cd", "complete", "jobs", "history", "declare"];
 const commandHistory = [];
 const backgroundJobs = [];
+const histFile = process.env.HISTFILE;
 const registeredCompletions = new Map();
+const shellVariables = new Map();
+let tabTracker = { line: "", count: 0 };
 let lastAppendIndex = 0;
 
 function completer(line) {
@@ -323,7 +325,6 @@ function parseArguments(input) {
   return args;
 }
 
-const histFile = process.env.HISTFILE;
 if (histFile && existsSync(histFile)) {
   try {
     const fileContent = readFileSync(histFile, "utf8");
@@ -696,6 +697,27 @@ rl.on("line", (command) => {
       
       if (lines.length > 0) {
         writeOut(lines.join("\n"));
+      }
+    }
+  }
+  else if (cmd === "declare") {
+    if (args[0] === "-p") {
+      // Handle inspection: declare -p variable
+      const varName = args[1];
+      if (shellVariables.has(varName)) {
+        writeOut(`declare -- ${varName}="${shellVariables.get(varName)}"`);
+      } else {
+        writeOut(`declare: ${varName}: not found`);
+      }
+    } else {
+      // Handle assignment: declare variable=value
+      const assignment = args[0] || "";
+      const eqIndex = assignment.indexOf("=");
+      
+      if (eqIndex !== -1) {
+        const varName = assignment.slice(0, eqIndex);
+        const varValue = assignment.slice(eqIndex + 1);
+        shellVariables.set(varName, varValue);
       }
     }
   }
