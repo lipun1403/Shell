@@ -346,7 +346,7 @@ rl.on("line", (command) => {
     commandHistory.push(trimmedCommand);
   }
 
-  const parsedCommand = parseArguments(command);
+  let parsedCommand = parseArguments(command);
 
   if (parsedCommand.length === 0) {
     promptAfterReaping();
