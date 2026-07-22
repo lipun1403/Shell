@@ -354,8 +354,10 @@ rl.on("line", (command) => {
   }
 
   parsedCommand = parsedCommand.map(token => {
-    // Look for $ followed by a valid identifier name
-    return token.replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, varName) => {
+    // Matches ${IDENTIFIER} (capture group 1) OR $IDENTIFIER (capture group 2)
+    return token.replace(/\$(?:\{([a-zA-Z_][a-zA-Z0-9_]*)\}|([a-zA-Z_][a-zA-Z0-9_]*))/g, (match, bracedName, unbracedName) => {
+      // Use whichever group actually matched the text
+      const varName = bracedName || unbracedName;
       // Replace with the stored value, or an empty string if not found
       return shellVariables.has(varName) ? shellVariables.get(varName) : "";
     });
