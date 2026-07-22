@@ -702,7 +702,6 @@ rl.on("line", (command) => {
   }
   else if (cmd === "declare") {
     if (args[0] === "-p") {
-      // Handle inspection: declare -p variable
       const varName = args[1];
       if (shellVariables.has(varName)) {
         writeOut(`declare -- ${varName}="${shellVariables.get(varName)}"`);
@@ -710,14 +709,19 @@ rl.on("line", (command) => {
         writeOut(`declare: ${varName}: not found`);
       }
     } else {
-      // Handle assignment: declare variable=value
       const assignment = args[0] || "";
       const eqIndex = assignment.indexOf("=");
       
       if (eqIndex !== -1) {
         const varName = assignment.slice(0, eqIndex);
         const varValue = assignment.slice(eqIndex + 1);
-        shellVariables.set(varName, varValue);
+        
+        // Validate the identifier
+        if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(varName)) {
+          shellVariables.set(varName, varValue);
+        } else {
+          writeOut(`declare: \`${assignment}': not a valid identifier`);
+        }
       }
     }
   }
