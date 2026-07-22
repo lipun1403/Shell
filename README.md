@@ -1,34 +1,54 @@
-[![progress-banner](https://backend.codecrafters.io/progress/shell/c0101f7b-a06f-4cbc-93e4-52929f4174b7)](https://app.codecrafters.io/users/lipun1403?r=2qF)
+# Node.js Custom Shell
 
-This is a starting point for JavaScript solutions to the
-["Build Your Own Shell" Challenge](https://app.codecrafters.io/courses/shell/overview).
+A lightweight, POSIX-inspired command-line shell built entirely from scratch using Node.js core modules. This project features a custom lexical analyzer and parser to handle complex shell behaviors without relying on any external packages.
 
-In this challenge, you'll build your own POSIX compliant shell that's capable of
-interpreting shell commands, running external programs and builtin commands like
-cd, pwd, echo and more. Along the way, you'll learn about shell command parsing,
-REPLs, builtin commands, and more.
+## Features
 
-**Note**: If you're viewing this repo on GitHub, head over to
-[codecrafters.io](https://codecrafters.io) to try the challenge.
+* **Zero Dependencies:** Built entirely using standard Node.js libraries (`fs`, `path`, `child_process`, `readline`). 
+* **Advanced Parsing:** Custom lexical analysis accurately handles single quotes, double quotes, and escape characters.
+* **Built-in Commands:** Native support for essential shell commands including `cd`, `pwd`, `echo`, `type`, `exit`, `history`, and `declare`.
+* **External Execution:** Dynamically resolves and executes system binaries, featuring full Windows compatibility for `.exe`, `.cmd`, and `.bat` extensions.
+* **Pipelines:** Chain commands together using pipes (`|`) to stream the output of one process directly into the input of the next.
+* **I/O Redirection:** Safely route standard output and standard error using standard operators (`>`, `>>`, `2>`, `2>>`).
+* **Job Control:** Run long-form tasks in the background using the `&` operator.
+* **Variable Expansion:** Declare, store, and expand environment variables (`$VAR`, `${VAR}`) on the fly.
+* **Interactive CLI:** Features interactive tab completion for built-ins and system executables.
 
-# Passing the first stage
+## Usage
 
-The entry point for your `shell` implementation is in `app/main.js`. Study and
-uncomment the relevant code, then run the command below to execute the tests on
-our servers:
+Start the shell by running the main entry file directly via Node.js:
 
-```sh
-codecrafters submit
-```
+```bash
+node app/main.js
 
-Time to move on to the next stage!
+Example Commands
+Variables and Quotes:
 
-# Stage 2 & beyond
+Bash
+$ declare GREETING="Hello World"
+$ echo "${GREETING}!"
+Hello World!
+Piping and Redirection:
 
-Note: This section is for stages 2 and beyond.
+Bash
+$ ls -la | grep "js" > output.txt
+$ cat output.txt
+Background Processes:
 
-1. Ensure you have `node (25)` installed locally
-1. Run `./your_program.sh` to run your program, which is implemented in
-   `app/main.js`.
-1. Run `codecrafters submit` to submit your solution to CodeCrafters. Test
-   output will be streamed to your terminal.
+Bash
+$ sleep 5 &
+Finding Executable Types:
+
+Bash
+$ type pwd
+pwd is a shell builtin
+$ type cat
+cat is /usr/bin/cat
+Architecture Overview
+This shell operates on a custom Read-Eval-Print Loop (REPL) pipeline:
+
+Tokenization: Raw user input is broken down into tokens, preserving exact spacing inside quoted strings and resolving escape characters.
+
+Parsing: Tokens are mapped to identify command intent, arguments, redirection targets, and pipeline connections.
+
+Execution: Built-in commands modify the current Node process state (such as process.chdir), while external commands are safely spawned and managed asynchronously using child_process.spawn.
