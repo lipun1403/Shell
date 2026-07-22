@@ -353,6 +353,23 @@ rl.on("line", (command) => {
     return;
   }
 
+  parsedCommand = parsedCommand.map(token => {
+    // Look for $ followed by a valid identifier name
+    return token.replace(/\$([a-zA-Z_][a-zA-Z0-9_]*)/g, (match, varName) => {
+      // Replace with the stored value, or an empty string if not found
+      return shellVariables.has(varName) ? shellVariables.get(varName) : "";
+    });
+  });
+  
+  // Clean up any arguments that became completely empty due to expanding 
+  // undefined variables (so `echo $UNDEFINED_VAR` doesn't print extra spaces)
+  parsedCommand = parsedCommand.filter(token => token !== "");
+  
+  if (parsedCommand.length === 0) {
+    promptAfterReaping();
+    return;
+  }
+
   let runInBackground = false;
   if (parsedCommand[parsedCommand.length - 1] === "&") {
     runInBackground = true;
